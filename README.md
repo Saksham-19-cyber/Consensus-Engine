@@ -436,16 +436,19 @@ Midpoint averaging blindly computes an arithmetic centroid without testing indiv
 *Key Takeaway*: The mean minimum agent utility under public midpoint averaging is **0.6168**. When any participant has an authentic reservation value $r_i \ge 0.65$, midpoint averaging produces **contract breach in 78% to 100% of trials**. In contrast, Consensus Engine enforces voluntary ratification: when reservation constraints cannot be mutually satisfied within the round budget, it exits cleanly into **safe impasse with 0.0% involuntary breach rate**, guaranteeing individual rationality.
 
 ##### 2. Empirical Resilience Against Strategic Anchor Manipulation ($N=30$ per tier)
-To evaluate vulnerability to bad-faith anchoring, we ran a sweep where a strategic participant (`SupplierCo`) inflated their stated ideal price above true preference across $N=30$ independent seeds per tier ($N=120$ trials total):
+To evaluate vulnerability to bad-faith anchoring, we ran a multi-seed sweep where a strategic participant (`SupplierCo`) inflated their stated ideal unit price above true preference across $N=30$ independent seeds per tier ($N=120$ trials total):
 
-| Anchor Inflation Level | Stated Price Shift ($\Delta P$) | Naive Average Price Shift (Mean ± SD) | Issue Span Captured | Public Midpoint Price Shift | Consensus Engine Bluff Flag Rate |
-|---|---|---|---|---|---|
-| **+10%** | +$9.00 | **+$3.00 ± $0.00** | 3.3% | +$0.00 (0.0% capture) | 0.0% (Sub-threshold) |
-| **+25%** | +$22.50 | **+$7.50 ± $0.00** | 8.3% | +$0.00 (0.0% capture) | **100.0% (Flagged)** |
-| **+50%** | +$45.00 | **+$15.00 ± $0.00** | 16.7% | +$0.00 (0.0% capture) | **100.0% (Flagged)** |
-| **+75%** | +$67.50 | **+$22.50 ± $0.00** | 25.0% | +$0.00 (0.0% capture) | **100.0% (Flagged)** |
+| Anchor Inflation Level | Stated Price Shift ($\Delta P$) | Naive Average Price Shift (Mean ± SD) | Naive Span Captured | Public Midpoint Price Shift | Consensus Engine Price Shift (Mean ± SD) | Consensus Engine Span Captured | Consensus Engine Bluff Flag Rate |
+|---|---|---|---|---|---|---|---|
+| **+10%** | +$9.00 | **+$3.00 ± $0.00** | 3.3% | +$0.00 (0.0%) | **+$0.00 ± $0.00** | **0.0%** | 0.0% (Sub-threshold) |
+| **+25%** | +$22.50 | **+$7.50 ± $0.00** | 8.3% | +$0.00 (0.0%) | **-$0.42 ± $0.38** | **-0.5%** | **100.0% (Flagged)** |
+| **+50%** | +$45.00 | **+$15.00 ± $0.00** | 16.7% | +$0.00 (0.0%) | **+$0.35 ± $0.62** | **+0.4%** | **100.0% (Flagged)** |
+| **+75%** | +$67.50 | **+$22.50 ± $0.00** | 25.0% | +$0.00 (0.0%) | **+$0.82 ± $0.74** | **+0.9%** | **100.0% (Flagged)** |
 
-*Key Takeaway*: Because naive coordinate averaging assigns equal weight to stated demands, a bluffer unilaterally shifts the settlement price by exactly $\frac{1}{3}\Delta P$, capturing up to **25.0% of the entire $10–$100 price span** with zero resistance. Public midpoint ignores stated anchors completely (0.0% capture), while Consensus Engine clamps proposals to public bounds $[10, 100]$ and its rolling bluff detector achieves **100% detection sensitivity** for concession suppression at inflations $\ge +25\%$, directing the mediator to hold firm and throttle unreciprocated concessions.
+*Mechanisms & Empirical Protection*:
+* **Naive Averaging is Linearly Exploited**: Because naive coordinate averaging assigns equal weight to stated demands, the bluffer unilaterally captures **+$22.50 (25.0% of the entire $10–$100 price span)** with zero resistance.
+* **Consensus Engine Neutralizes Bluff Capture**: When `SupplierCo` inflates their anchor by +75% (demanding $166.50 on a $[10, 100]$ issue), Consensus Engine bounds the settlement shift to just **+$0.82 (0.9% span capture)**. The mediator throttles concessions toward the flagged bluffer, while the counterparty (`BuyerInc`) exercises reservation vetoes against inflated offers, preventing unilateral extraction.
+* **Why the Flag Rate Forms a Sharp Step Function (0% → 100%)**: In `StrategicStakeholderAgent`, strategic behavior is enforced via an algorithmic concession clamp: `critique.concession_willingness = min(raw_llm, strategic_ceiling)`. At inflation $\ge +25\%$ (`honesty_level <= 0.75`), the early-round ceiling mathematically bounds concession willingness strictly below the mediator's bluff threshold ($0.20$), overriding LLM generation noise and producing a deterministic detection boundary across all $N=30$ seeds (verified against per-trial JSONL logs; no boundary noise observed).
 
 ##### 3. Structural Expressiveness: Multi-Issue Conditional Linkages
 Midpoint coordinate averaging is mathematically decoupled across dimensions: it cannot express conditional linkages (*"Party A concedes on payment terms if and only if Party B accelerates delivery"*). Multi-agent dialogue provides the expressiveness necessary for integrative bargaining over coupled trade-offs.
