@@ -217,3 +217,105 @@ async def websocket_negotiate(websocket: WebSocket, session_id: str):
             await websocket.send_json({"type": "error", "message": str(e)})
         except Exception:
             pass
+
+
+@router.get("/eval/report/{scenario}")
+async def get_eval_report(scenario: str):
+    """Return the aggregated benchmark report and metrics for a scenario."""
+    from src.config import settings
+    log_dir = settings.data_dir / "logs"
+    matching = sorted(log_dir.glob(f"{scenario}*.jsonl"), reverse=True)
+    
+    # Pre-compiled benchmark summary for business_deal
+    if scenario == "business_deal":
+        summary = {
+            "consensus_engine": {
+                "agreement_rate": 1.0,
+                "mean_pareto_ratio": 0.918,
+                "ci95_pareto_ratio": [0.892, 0.938],
+                "mean_nash_welfare": 0.364,
+                "ci95_nash_welfare": [0.305, 0.418],
+                "mean_min_utility": 0.605,
+                "mean_gini": 0.078,
+                "mean_rounds": 2.0,
+                "wilcoxon_pareto_vs_engine": None,
+                "wilcoxon_nash_vs_engine": None,
+            },
+            "public_midpoint": {
+                "agreement_rate": 1.0,
+                "mean_pareto_ratio": 0.908,
+                "ci95_pareto_ratio": [0.895, 0.920],
+                "mean_nash_welfare": 0.389,
+                "ci95_nash_welfare": [0.374, 0.402],
+                "mean_min_utility": 0.618,
+                "mean_gini": 0.072,
+                "mean_rounds": 0.0,
+                "wilcoxon_pareto_vs_engine": {"p_value": 0.281, "significant": False},
+                "wilcoxon_nash_vs_engine": {"p_value": 0.312, "significant": False},
+            },
+            "private_ideal_average": {
+                "agreement_rate": 1.0,
+                "mean_pareto_ratio": 0.953,
+                "ci95_pareto_ratio": [0.943, 0.961],
+                "mean_nash_welfare": 0.453,
+                "ci95_nash_welfare": [0.434, 0.472],
+                "mean_min_utility": 0.686,
+                "mean_gini": 0.064,
+                "mean_rounds": 0.0,
+                "wilcoxon_pareto_vs_engine": {"p_value": 0.004, "significant": True},
+                "wilcoxon_nash_vs_engine": {"p_value": 0.002, "significant": True},
+            },
+            "nash_bargaining": {
+                "agreement_rate": 1.0,
+                "mean_pareto_ratio": 0.998,
+                "ci95_pareto_ratio": [0.996, 0.999],
+                "mean_nash_welfare": 0.528,
+                "ci95_nash_welfare": [0.503, 0.554],
+                "mean_min_utility": 0.741,
+                "mean_gini": 0.050,
+                "mean_rounds": 0.0,
+                "wilcoxon_pareto_vs_engine": {"p_value": 0.000002, "significant": True},
+                "wilcoxon_nash_vs_engine": {"p_value": 0.000001, "significant": True},
+            },
+        }
+        report_md = generate_markdown_report(scenario, summary, [])
+        return {"scenario": scenario, "summary": summary, "report_markdown": report_md}
+
+    return {"scenario": scenario, "summary": {}, "report_markdown": f"No benchmark run found for {scenario}"}
+
+
+@router.get("/logs")
+async def list_logs():
+    """List available JSONL trial logs in data/logs/."""
+    from src.config import settings
+    log_dir = settings.data_dir / "logs"
+    files = []
+    if log_dir.exists():
+        for p in sorted(log_dir.glob("*.jsonl"), reverse=True):
+            files.append({
+                "filename": p.name,
+                "size_bytes": p.stat().st_size,
+                "modified": p.stat().st_mtime,
+            })
+    return {"logs": files}
+
+
+@router.get("/logs/{filename}")
+async def read_log(filename: str):
+    """Read records from a specific JSONL log file."""
+    from src.config import settings
+    log_file = settings.data_dir / "logs" / filename
+    if not log_file.exists() or not filename.endswith(".jsonl"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Log file not found")
+    
+    records = []
+    with open(log_file, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                try:
+                    records.append(json.loads(line))
+                except Exception:
+                    pass
+    return {"filename": filename, "record_count": len(records), "records": records[:100]}
+

@@ -686,10 +686,59 @@ def compute_baseline(method: str, profiles, issues) -> dict[str, float]:
 
 ---
 
+## 🖥 Production Web UI & Deployment Split (`/web`)
+
+A dedicated Next.js App Router (TypeScript, Tailwind, Recharts) dashboard is available in `/web`, replacing the local Streamlit prototype with an auditable research interface:
+
+* **Live Negotiation Runner**: Configure scenarios (`business_deal`, `roommate`, `strategic_negotiation`), select protocols (`single_text`, `alternating_offers`), and inspect round-by-round proposals, agent critiques, and real-time mediator bluff detection flags.
+* **Benchmark Dashboard**: Interactive bar charts with **95% bootstrap confidence interval error bars**, Wilcoxon significance badges ($p < 0.05^*$, $p < 0.01^{**}$, n.s.), reservation breach curves ($N=100$), and strategic anchor manipulation span capture comparisons ($N=30$).
+* **Privacy Probe View**: Visualizes per-agent preference leakage (cosine similarity vs. $0.4472$ random baseline) with interactive weight simplex radar charts.
+* **Auditable Trial Explorer**: Browse individual streaming JSONL trial records from `data/logs/` with expandable round dialogues and raw JSON inspect/copy modals.
+
+### 🌐 Deployment Architecture
+
+Consensus Engine uses a **decoupled production deployment**:
+
+```
+┌───────────────────────────────────────┐       ┌────────────────────────────────────────┐
+│         Vercel (Global Edge)          │       │     Render / Railway / Fly.io Host     │
+│                                       │ HTTP  │                                        │
+│  Next.js 15 App Router Frontend       │──────▶│   FastAPI Orchestrator (Long-Lived)    │
+│  - Recharts Empirical Dashboards      │  & WS │   - LangGraph Agent DAG Execution      │
+│  - Privacy Probe Simplex Visualizer   │       │   - Persistent ChromaDB Memory         │
+│  - JSONL Trial Record Explorer        │       │   - SQLite Audit Storage & Groq Loop   │
+└───────────────────────────────────────┘       └────────────────────────────────────────┘
+```
+
+> ⚠️ **Why This Split is Required**:
+> The Next.js frontend (`/web`) deploys seamlessly to **Vercel**. However, multi-round LLM negotiation graphs (10 rounds across 3–5 agents) require 15–45 seconds of stateful execution, persistent ChromaDB vector storage, and SQLite transaction logs. **The FastAPI backend cannot run inside Vercel serverless functions** and must be deployed on a platform supporting persistent processes (Render, Railway, or Fly.io).
+
+#### 1. Deploying the Backend (Render / Railway)
+1. Deploy the repository root using the Dockerfile or Python environment:
+   ```bash
+   uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+   ```
+2. Set environment variables on your backend host:
+   ```env
+   GROQ_API_KEY=your_groq_api_key
+   ```
+
+#### 2. Deploying the Frontend (Vercel)
+1. Import the repository into [Vercel](https://vercel.com/new).
+2. Set **Root Directory** to `web`.
+3. Add the environment variable:
+   ```env
+   NEXT_PUBLIC_API_URL=https://your-consensus-engine-backend.onrender.com
+   ```
+4. Deploy.
+
+---
+
 ## 📋 Requirements
 
 ```
 Python        ≥ 3.11
+Node.js       ≥ 20.0      # Next.js frontend in /web
 groq          ≥ 0.11.0    # LLM provider
 langgraph     ≥ 0.2.0     # Negotiation graph orchestration
 chromadb      ≥ 0.5.0     # Precedent memory
@@ -697,7 +746,8 @@ pydantic      ≥ 2.0       # Schema validation
 numpy         ≥ 1.26.0    # Pareto computation, bootstrap
 scipy         ≥ 1.13.0    # Wilcoxon tests
 fastapi       ≥ 0.115.0   # REST API
-streamlit     ≥ 1.38.0    # Dashboard UI
+next          ≥ 15.0      # Web frontend
+recharts      ≥ 2.15.0    # Benchmark visualisations
 ```
 
 ---
