@@ -1,8 +1,23 @@
+import sys
 import os
+from pathlib import Path
+
+# Ensure repository root is on sys.path so 'src' and 'scenarios' can be imported anywhere
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 import streamlit as st
 import requests
 import json
 import time
+
+# Propagate GROQ_API_KEY from Streamlit Cloud secrets to os.environ
+try:
+    if "GROQ_API_KEY" in st.secrets and not os.getenv("GROQ_API_KEY"):
+        os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+except Exception:
+    pass
 
 try:
     API_BASE = st.secrets.get("API_BASE", os.getenv("API_BASE", "http://localhost:8000/api"))
@@ -79,6 +94,10 @@ tab1, tab2, tab3 = st.tabs(["🎯 Negotiate", "📊 Evaluate", "📋 History"])
 
 with tab1:
     with st.sidebar:
+        if not os.getenv("GROQ_API_KEY"):
+            api_key_input = st.text_input("🔑 Groq API Key", type="password", help="Required for multi-agent LLM negotiation")
+            if api_key_input:
+                os.environ["GROQ_API_KEY"] = api_key_input
         st.markdown("### ⚙️ Configuration")
         scenario = st.selectbox("Scenario", ["roommate", "business_deal", "trip_planning"])
         n_agents = st.slider("Agents", 2, 5, 3 if scenario == "trip_planning" else 2)
@@ -213,9 +232,28 @@ with tab2:
                 }, timeout=600)
                 eval_data = resp.json()
                 st.session_state["last_eval"] = eval_data
-            except Exception as e:
-                st.error(f"Error: {e}")
-                eval_data = None
+            except Exception as net_err:
+                try:
+                    from scenarios.generator import get_scenario
+                    from src.eval.runner import run_evaluation
+                    from src.eval.report import generate_markdown_report
+
+                    sc_obj = get_scenario(eval_scenario)
+                    report = run_evaluation(
+                        scenario=sc_obj,
+                        methods=eval_methods,
+                        n_trials=eval_trials,
+                        seed=eval_seed,
+                    )
+                    eval_data = {
+                        "scenario": eval_scenario,
+                        "report_markdown": generate_markdown_report(report),
+                        "summary": report.summary,
+                    }
+                    st.session_state["last_eval"] = eval_data
+                except Exception as inner_e:
+                    st.error(f"Error connecting to backend ({net_err}) and in-process eval failed: {inner_e}")
+                    eval_data = None
 
         if eval_data:
             st.markdown(eval_data.get("report_markdown", ""))
