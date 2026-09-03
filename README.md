@@ -686,18 +686,51 @@ def compute_baseline(method: str, profiles, issues) -> dict[str, float]:
 
 ---
 
-## 🖥 Production Web UI & Deployment Split (`/web`)
+## 🖥 Frontend Interfaces & Deployment Links
 
-A dedicated Next.js App Router (TypeScript, Tailwind, Recharts) dashboard is available in `/web`, replacing the local Streamlit prototype with an auditable research interface:
+Consensus Engine provides two dedicated frontend interfaces for exploring multi-agent negotiations and empirical benchmarks:
+
+| Interface | Technology | Primary Purpose | Live URL / Local Access |
+|---|---|---|---|
+| **Production Research Web App** | Next.js 15, TypeScript, Tailwind, Recharts | Interactive runner, 95% bootstrap CI charts, privacy probe simplex visualizer, JSONL trial explorer | **[consensus-engine-web.vercel.app](https://consensus-engine-web.vercel.app)** <br> *(Local: `http://localhost:3000`)* |
+| **Streamlit Analytics Dashboard** | Streamlit, Python, Requests | Rapid local experimentation, session playback, parameter sweeps | **[consensus-engine.streamlit.app](https://consensus-engine.streamlit.app)** <br> *(Local: `http://localhost:8501`)* |
+| **FastAPI Orchestration Backend** | FastAPI, LangGraph, ChromaDB, Groq | Agent graph execution, SQLite audit persistence, precedent memory | **[consensus-engine-api.onrender.com](https://consensus-engine-api.onrender.com)** <br> *(Local: `http://localhost:8000`)* |
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSaksham-19-cyber%2FConsensus-Engine&root-directory=web)
+
+---
+
+### 1. Next.js Production Web App (`/web`)
 
 * **Live Negotiation Runner**: Configure scenarios (`business_deal`, `roommate`, `strategic_negotiation`), select protocols (`single_text`, `alternating_offers`), and inspect round-by-round proposals, agent critiques, and real-time mediator bluff detection flags.
 * **Benchmark Dashboard**: Interactive bar charts with **95% bootstrap confidence interval error bars**, Wilcoxon significance badges ($p < 0.05^*$, $p < 0.01^{**}$, n.s.), reservation breach curves ($N=100$), and strategic anchor manipulation span capture comparisons ($N=30$).
 * **Privacy Probe View**: Visualizes per-agent preference leakage (cosine similarity vs. $0.4472$ random baseline) with interactive weight simplex radar charts.
 * **Auditable Trial Explorer**: Browse individual streaming JSONL trial records from `data/logs/` with expandable round dialogues and raw JSON inspect/copy modals.
 
-### 🌐 Deployment Architecture
+#### Running Next.js Locally:
+```bash
+cd web
+npm install
+npm run dev
+# Open http://localhost:3000
+```
 
-Consensus Engine uses a **decoupled production deployment**:
+---
+
+### 2. Streamlit Dashboard (`/frontend`)
+
+```bash
+# Start backend orchestrator
+uvicorn src.api.main:app --port 8000 &
+
+# Start Streamlit frontend
+streamlit run frontend/app.py
+# Open http://localhost:8501
+```
+
+---
+
+### 🌐 Decoupled Deployment Architecture
 
 ```
 ┌───────────────────────────────────────┐       ┌────────────────────────────────────────┐
@@ -713,7 +746,7 @@ Consensus Engine uses a **decoupled production deployment**:
 > ⚠️ **Why This Split is Required**:
 > The Next.js frontend (`/web`) deploys seamlessly to **Vercel**. However, multi-round LLM negotiation graphs (10 rounds across 3–5 agents) require 15–45 seconds of stateful execution, persistent ChromaDB vector storage, and SQLite transaction logs. **The FastAPI backend cannot run inside Vercel serverless functions** and must be deployed on a platform supporting persistent processes (Render, Railway, or Fly.io).
 
-#### 1. Deploying the Backend (Render / Railway)
+#### Backend Deployment (Render / Railway)
 1. Deploy the repository root using the Dockerfile or Python environment:
    ```bash
    uvicorn src.api.main:app --host 0.0.0.0 --port 8000
@@ -723,14 +756,14 @@ Consensus Engine uses a **decoupled production deployment**:
    GROQ_API_KEY=your_groq_api_key
    ```
 
-#### 2. Deploying the Frontend (Vercel)
-1. Import the repository into [Vercel](https://vercel.com/new).
+#### Frontend Deployment (Vercel)
+1. Click the **Deploy with Vercel** button above or import the repository in [Vercel](https://vercel.com/new).
 2. Set **Root Directory** to `web`.
 3. Add the environment variable:
    ```env
    NEXT_PUBLIC_API_URL=https://your-consensus-engine-backend.onrender.com
    ```
-4. Deploy.
+4. Deploy to receive your live `https://<your-project>.vercel.app` URL.
 
 ---
 
