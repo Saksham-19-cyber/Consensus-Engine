@@ -1,7 +1,16 @@
-import pytest
-from src.eval.baselines import naive_average_baseline, nash_bargaining_baseline
+from src.eval.baselines import naive_average_baseline, nash_bargaining_baseline, public_midpoint_baseline
 from src.eval.runner import evaluate_outcome, run_baseline_trial
 from scenarios.roommate import RoommateScenario
+
+
+def test_public_midpoint_on_roommate():
+    s = RoommateScenario()
+    profiles, issues = s.generate(seed=42)
+    proposal = public_midpoint_baseline(profiles, issues)
+    assert len(proposal) == len(issues)
+    for issue in issues:
+        expected = (issue["range"][0] + issue["range"][1]) / 2
+        assert abs(proposal[issue["name"]] - expected) < 1e-6
 
 
 def test_naive_average_on_roommate():

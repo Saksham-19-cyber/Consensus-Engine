@@ -84,7 +84,7 @@ def _bootstrap_ci(
 def wilcoxon_test(
     values_a: list[float],
     values_b: list[float],
-    alternative: str = "greater",
+    alternative: str = "two-sided",
 ) -> dict[str, Any]:
     """
     Wilcoxon signed-rank test comparing two paired metric sequences.
@@ -278,13 +278,12 @@ def aggregate_results(
             "bluff_detection_flagged": bluff_flagged,
         }
 
-        # Wilcoxon vs Consensus Engine (only for non-engine methods)
         if method != engine_method and engine_pareto and pareto_ratios:
             entry["wilcoxon_pareto_vs_engine"] = wilcoxon_test(
-                engine_pareto, pareto_ratios, alternative="greater"
+                engine_pareto, pareto_ratios, alternative="two-sided"
             )
             entry["wilcoxon_nash_vs_engine"] = wilcoxon_test(
-                engine_nash, nash_welfares, alternative="greater"
+                engine_nash, nash_welfares, alternative="two-sided"
             )
 
         summary[method] = entry

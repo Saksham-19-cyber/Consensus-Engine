@@ -8,7 +8,7 @@
 [![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-1C8B6E?style=for-the-badge&logo=chainlink&logoColor=white)](https://github.com/langchain-ai/langgraph)
 [![Groq](https://img.shields.io/badge/LLM-Groq%20SDK-F55036?style=for-the-badge&logo=openai&logoColor=white)](https://groq.com)
 [![ChromaDB](https://img.shields.io/badge/Memory-ChromaDB-E85D04?style=for-the-badge&logo=databricks&logoColor=white)](https://trychroma.com)
-[![Tests](https://img.shields.io/badge/Tests-86%20passing-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-87%20passing-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-A371F7?style=for-the-badge)](LICENSE)
 
 <br/>
@@ -404,18 +404,35 @@ expense of other participants. Hold firm on balanced terms until deadline pressu
 
 ### 4 · Benchmark Evaluation with 95% Bootstrap CIs & Wilcoxon Tests
 
-Evaluated on the 5-issue `business_deal` scenario across independent seeded runs, comparing **Consensus Engine** directly against the naive midpoint baseline and the omniscient mathematical oracle:
+Evaluated on the 5-issue `business_deal` scenario across $N=10$ independent seeded runs, comparing **Consensus Engine** against zero-knowledge arithmetic heuristics, a semi-oracle private ideal average, and the omniscient mathematical oracle:
 
-| Method | Agreement Rate | Pareto Efficiency Ratio (95% CI) | Nash Social Welfare (95% CI) | Min Utility | Gini Coeff | Avg Rounds | Wilcoxon vs Engine |
-|---|---|---|---|---|---|---|---|
-| **`consensus_engine`** | **100.0%** | **0.918 ± 0.023** `[0.892, 0.938]` | **0.364 ± 0.056** `[0.305, 0.418]` | 0.605 | 0.078 | **2.0** | *(Engine Under Test)* |
-| **`naive_average`** | 100.0% | **0.957 ± 0.019** `[0.937, 0.976]` | **0.416 ± 0.068** `[0.348, 0.484]` | 0.666 | 0.069 | 0.0 | (n.s.) |
-| **`nash_bargaining`** *(Oracle)* | 100.0% | **0.996 ± 0.006** `[0.989, 1.000]` | **0.474 ± 0.060** `[0.414, 0.535]` | 0.685 | 0.066 | 0.0 | (n.s.) |
+| Method | Information Level | Agreement Rate | Pareto Efficiency Ratio (95% CI) | Nash Social Welfare (95% CI) | Min Utility | Gini Coeff | Avg Rounds | Wilcoxon vs Engine |
+|---|---|---|---|---|---|---|---|---|
+| **`consensus_engine`** | **Private (Zero-Central)** | **100.0%** | **0.919 ± 0.021** `[0.905, 0.931]` | **0.370 ± 0.018** `[0.351, 0.386]` | 0.605 | 0.078 | **2.0** | *(Engine Under Test)* |
+| **`public_midpoint`** | Public Only (Zero-Knowledge) | 100.0% | **0.898 ± 0.031** `[0.879, 0.917]` | **0.378 ± 0.050** `[0.348, 0.406]` | 0.621 | 0.074 | 0.0 | p = 0.322 (n.s.) |
+| **`private_ideal_average`** | Semi-Oracle (Private Ideals) | 100.0% | **0.950 ± 0.025** `[0.935, 0.966]` | **0.452 ± 0.074** `[0.408, 0.496]` | 0.686 | 0.064 | 0.0 | **p = 0.027 (\*)** |
+| **`nash_bargaining`** | Full Oracle (All Curves Known) | 100.0% | **0.998 ± 0.005** `[0.994, 1.000]` | **0.551 ± 0.099** `[0.492, 0.610]` | 0.741 | 0.050 | 0.0 | **p = 0.002 (\*\*)** |
 
-> **Key Findings & Scientific Trade-Offs:**  
-> - **Autonomous Multi-Agent Coordination**: `consensus_engine` achieves guaranteed agreement (100%) in 2.0 dialogue rounds without central access to any private utility curves, attaining a high **0.918 Pareto efficiency ratio**.  
-> - **The Cost of Decentralization & Privacy**: The theoretical **Nash Bargaining Solution** operates as an omniscient mathematical oracle with complete visibility into all private mathematical utilities, achieving a Pareto ratio of **0.996**. The ~8% delta reflects the authentic cost of decentralized negotiation under strategic posturing and incomplete information.  
-> - **Statistical Rigour**: Confidence intervals are 95% bootstrap (1,000 resamples). Differences are evaluated via non-parametric Wilcoxon signed-rank tests.
+> ⚠️ **Critical Empirical Finding — The Limits of Raw Efficiency in Symmetric Spaces:**  
+> **Consensus Engine does not outperform simple midpoint heuristics on raw point-estimate Pareto efficiency or Nash social welfare in symmetric linear settings.** It is statistically tied with the zero-knowledge public range midpoint ($p = 0.322$, n.s.) and is statistically significantly outperformed by the semi-oracle private ideal average ($p = 0.027^*$) and the omniscient Nash bargaining oracle ($p = 0.002^{**}$).  
+>  
+> In symmetric unconstrained issue spaces where preferences pull toward opposite extremes, the arithmetic centroid $(min+max)/2$ acts as an effective $L_1$ compromise. Running multi-agent LLM dialogue in these settings incurs latency and API overhead without yielding an efficiency premium over arithmetic averaging.
+
+#### Why Multi-Agent Negotiation Systems are Necessary Beyond Midpoint Averaging
+
+If a simple midpoint matches the engine on efficiency in symmetric scenarios, why build an agentic negotiation engine at all?
+
+1. **Feasibility Under Asymmetric Reservation Values**:  
+   Midpoint averaging blindly computes an arithmetic coordinate without regard for individual rationality. If any stakeholder has a strict reservation threshold ($r_i > 0.65$), midpoint averaging causes **guaranteed impasse or contract breach**. Consensus Engine's iterative critique loop guarantees that proposals are ratified only when every agent's voluntary acceptance condition is satisfied.
+2. **Vulnerability to Strategic Manipulation**:  
+   Midpoint averaging is trivially exploitable: a strategic actor can declare extreme artificial bounds to unilaterally drag the arithmetic mean toward their preferred outcome. Consensus Engine's rolling bluff-detection heuristic tracks concession willingness and penalizes artificial posturing across dialogue rounds.
+3. **Qualitative Deliberation & Complex Conditionality**:  
+   Real-world multi-issue settlements involve conditional package linkages (*"We will concede on payment terms only if delivery windows expand"*). These semantic trade-offs cannot be formulated by static coordinate averaging.
+
+#### Statistical Methodology & Resolution of Label Anomalies
+- **Two-Sided Wilcoxon Hypothesis**: Significance is computed using an unbiased two-sided Wilcoxon signed-rank test ($H_0: \mu_{\text{engine}} = \mu_{\text{method}}$), properly detecting when oracles significantly exceed the engine ($p < 0.05^*$, $p < 0.01^{**}$).
+- **Sample Size & Statistical Power ($N=10$)**: For two-sided Wilcoxon signed-rank tests at $N=5$, the mathematical minimum p-value is $2 \times (1/2)^5 = 0.0625$, which is incapable of achieving $\alpha = 0.05$ even when bootstrap CIs do not overlap. At $N=10$, statistical power is restored, yielding valid inferential testing across independent trial seeds.
+- **Bootstrap 95% Confidence Intervals**: 1,000 resamples computed directly over independent trial outcomes.
 
 ### 5 · Auditable Streaming Trial Log (`data/logs/*.jsonl`)
 
@@ -452,7 +469,7 @@ cp .env.example .env
 
 ```bash
 pytest -v
-# Expected: 86 passed
+# Expected: 87 passed
 ```
 
 ### Run a Negotiation

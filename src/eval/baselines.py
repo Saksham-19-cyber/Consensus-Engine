@@ -13,10 +13,22 @@ class OracleProposal(BaseModel):
     reasoning: str = ""
 
 
+def public_midpoint_baseline(
+    profiles: list[StakeholderProfile],
+    issues: list[dict],
+) -> dict[str, float]:
+    """True zero-knowledge baseline: midpoint of public issue ranges without any agent profile knowledge."""
+    return {
+        issue["name"]: float((issue["range"][0] + issue["range"][1]) / 2)
+        for issue in issues
+    }
+
+
 def naive_average_baseline(
     profiles: list[StakeholderProfile],
     issues: list[dict],
 ) -> dict[str, float]:
+    """Semi-oracle baseline: averages agents' true private ideal points (requires private knowledge)."""
     result = {}
     for issue in issues:
         name = issue["name"]
@@ -133,7 +145,9 @@ def compute_baseline(
     profiles: list[StakeholderProfile],
     issues: list[dict],
 ) -> dict[str, float]:
-    if method == "naive_average":
+    if method in ("public_midpoint", "range_midpoint"):
+        return public_midpoint_baseline(profiles, issues)
+    elif method in ("naive_average", "private_ideal_average"):
         return naive_average_baseline(profiles, issues)
     elif method == "nash_bargaining":
         return nash_bargaining_baseline(profiles, issues)
