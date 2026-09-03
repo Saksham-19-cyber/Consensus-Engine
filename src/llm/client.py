@@ -4,7 +4,7 @@ import logging
 import time
 from typing import TypeVar, Type
 
-from groq import Groq, APIError, RateLimitError
+from groq import Groq, APIError, RateLimitError, APIConnectionError
 from pydantic import BaseModel, ValidationError
 from tenacity import (
     retry,
@@ -72,8 +72,8 @@ def _pydantic_to_json_schema(model_class: Type[BaseModel]) -> dict:
 
 
 @retry(
-    retry=retry_if_exception_type(RateLimitError),
-    wait=wait_exponential(multiplier=2, min=4, max=60),
+    retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
     stop=stop_after_attempt(5),
 )
 def _call_groq(
@@ -87,7 +87,7 @@ def _call_groq(
         "messages": messages,
         "model": model,
         "temperature": temperature,
-        "max_tokens": 2048,
+        "max_tokens": 4096,
     }
     if response_format:
         kwargs["response_format"] = response_format
@@ -141,19 +141,26 @@ def structured_completion(
     for attempt in range(max_retries):
         try:
             raw = _call_groq(patched_messages, model, temperature, response_format)
-            parsed = json.loads(raw)
+            cleaned_raw = raw.strip()
+            if cleaned_raw.startswith("```"):
+                lines = cleaned_raw.splitlines()
+                if lines and lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                cleaned_raw = "\n".join(lines).strip()
+            parsed = json.loads(cleaned_raw)
             result = response_model.model_validate(parsed)
             return result
         except (json.JSONDecodeError, ValidationError) as e:
             last_error = e
             logger.warning("attempt %d/%d failed: %s", attempt + 1, max_retries, e)
-            error_msg = f"Your previous response was invalid: {e}. Fix it and respond again with valid JSON."
+            error_msg = f"Your previous response was invalid: {e}. Respond ONLY with raw JSON object matching the schema. No markdown, no backticks."
             patched_messages.append({"role": "assistant", "content": raw if "raw" in dir() else ""})
             patched_messages.append({"role": "user", "content": error_msg})
         except APIError as e:
             last_error = e
             logger.error("groq api error: %s", e)
-            time.sleep(1.0)
             if "json_validate_failed" in str(e) or "response_format" in str(e):
                 response_format = None
             if attempt == max_retries - 1:

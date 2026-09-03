@@ -422,26 +422,33 @@ Evaluated on the 5-issue `business_deal` scenario across $N=30$ independent seed
 
 While raw efficiency metrics in symmetric spaces show parity, multi-agent negotiation exhibits critical empirical and structural advantages in non-trivial operating regimes:
 
-##### 1. Empirical Impasse Rate Under Asymmetric Reservation Thresholds
-Midpoint averaging computes an arithmetic coordinate without regard for individual rationality. When tested across 100 independent trials with varying reservation thresholds $r_i$:
+##### 1. Empirical Impasse & Breach Rates Under Asymmetric Reservation Thresholds
+Midpoint averaging blindly computes an arithmetic centroid without testing individual rationality ($U_i \ge r_i$). When evaluated across $N=100$ independent seeded trials with varying reservation thresholds $r_i$ against Consensus Engine ($N=30$ seeded runs per tier):
 
-| Reservation Threshold ($r_i$) | Public Midpoint Agreement Rate | Public Midpoint Impasse / Failure Rate | Consensus Engine Agreement Rate |
-|---|---|---|---|
-| $r_i \le 0.40$ (Loose) | **100.0%** | 0.0% | **100.0%** |
-| $r_i = 0.55$ (Moderate) | 96.0% | 4.0% | **100.0%** |
-| $r_i = 0.60$ (Strict) | 67.0% | **33.0% (Impasse)** | **100.0%** |
-| $r_i = 0.65$ (Very Strict) | 23.0% | **77.0% (Impasse)** | **100.0%** |
-| $r_i = 0.70$ (Extreme) | 0.0% | **100.0% (Impasse)** | **Ratification Guarded** |
+| Reservation Threshold ($r_i$) | Public Midpoint Feasible Agreement Rate ($N=100$) | Public Midpoint Involuntary Breach Rate ($N=100$) | Consensus Engine Voluntary Agreement Rate ($N=30$) | Consensus Engine Involuntary Breach Rate ($N=30$) |
+|---|---|---|---|---|
+| $r_i \le 0.40$ (Loose) | **100.0%** | 0.0% | **100.0%** | **0.0%** |
+| $r_i = 0.55$ (Moderate) | 96.0% | 4.0% | **100.0%** | **0.0%** |
+| $r_i = 0.60$ (Strict) | 67.0% | 33.0% (Breach) | 40.0% (60% safe impasse) | **0.0%** |
+| $r_i = 0.65$ (Very Strict) | 22.0% | 78.0% (Breach) | 20.0% (80% safe impasse) | **0.0%** |
+| $r_i = 0.70$ (Extreme) | **0.0%** | **100.0% (Total Breach)** | **0.0% (100% safe impasse)** | **0.0%** |
 
-*Under tight reservation values ($r_i \ge 0.65$), midpoint averaging produces guaranteed failure in over three-quarters of trials. Consensus Engine guarantees that a contract is ratified only when all participants voluntarily verify individual rationality.*
+*Key Takeaway*: The mean minimum agent utility under public midpoint averaging is **0.6168**. When any participant has an authentic reservation value $r_i \ge 0.65$, midpoint averaging produces **contract breach in 78% to 100% of trials**. In contrast, Consensus Engine enforces voluntary ratification: when reservation constraints cannot be mutually satisfied within the round budget, it exits cleanly into **safe impasse with 0.0% involuntary breach rate**, guaranteeing individual rationality.
 
-##### 2. Empirical Resilience Against Strategic Anchor Manipulation
-When evaluated against a strategic negotiator who inflates stated demands (e.g. `SupplierCo` anchoring price from true ideal \$99 up to an extreme anchor of \$150):
-* **Naive Averaging**: With zero concession tracking or bluff detection, the settlement price shifts from **\$56.03 to \$73.00 (+$16.97, unilaterally capturing +30.3% of the entire issue span)** without resistance.
-* **Consensus Engine**: The mediator clamps all proposals to the public range $[10, 100]$ and the rolling bluff detector monitors concession suppression across rounds, alerting the mediator to hold firm and throttle concessions toward the bluffer.
+##### 2. Empirical Resilience Against Strategic Anchor Manipulation ($N=30$ per tier)
+To evaluate vulnerability to bad-faith anchoring, we ran a sweep where a strategic participant (`SupplierCo`) inflated their stated ideal price above true preference across $N=30$ independent seeds per tier ($N=120$ trials total):
+
+| Anchor Inflation Level | Stated Price Shift ($\Delta P$) | Naive Average Price Shift (Mean ± SD) | Issue Span Captured | Public Midpoint Price Shift | Consensus Engine Bluff Flag Rate |
+|---|---|---|---|---|---|
+| **+10%** | +$9.00 | **+$3.00 ± $0.00** | 3.3% | +$0.00 (0.0% capture) | 0.0% (Sub-threshold) |
+| **+25%** | +$22.50 | **+$7.50 ± $0.00** | 8.3% | +$0.00 (0.0% capture) | **100.0% (Flagged)** |
+| **+50%** | +$45.00 | **+$15.00 ± $0.00** | 16.7% | +$0.00 (0.0% capture) | **100.0% (Flagged)** |
+| **+75%** | +$67.50 | **+$22.50 ± $0.00** | 25.0% | +$0.00 (0.0% capture) | **100.0% (Flagged)** |
+
+*Key Takeaway*: Because naive coordinate averaging assigns equal weight to stated demands, a bluffer unilaterally shifts the settlement price by exactly $\frac{1}{3}\Delta P$, capturing up to **25.0% of the entire $10–$100 price span** with zero resistance. Public midpoint ignores stated anchors completely (0.0% capture), while Consensus Engine clamps proposals to public bounds $[10, 100]$ and its rolling bluff detector achieves **100% detection sensitivity** for concession suppression at inflations $\ge +25\%$, directing the mediator to hold firm and throttle unreciprocated concessions.
 
 ##### 3. Structural Expressiveness: Multi-Issue Conditional Linkages
-Midpoint averaging is mathematically decoupled across dimensions: it cannot express conditional linkages (*"Party A concedes on payment terms if and only if Party B accelerates delivery"*). Multi-agent dialogue provides the expressiveness necessary for integrative bargaining over coupled trade-offs.
+Midpoint coordinate averaging is mathematically decoupled across dimensions: it cannot express conditional linkages (*"Party A concedes on payment terms if and only if Party B accelerates delivery"*). Multi-agent dialogue provides the expressiveness necessary for integrative bargaining over coupled trade-offs.
 
 #### Statistical Methodology ($N=30$)
 - **Two-Sided Wilcoxon Signed-Rank Test**: All significance tests evaluate the unbiased two-sided hypothesis ($H_0: \mu_{\text{engine}} = \mu_{\text{method}}$), properly detecting when oracles significantly exceed the engine ($p < 0.01^{**}$).
