@@ -29,17 +29,21 @@ logger = logging.getLogger(__name__)
 # Model configuration presets
 # ---------------------------------------------------------------------------
 MODEL_CONFIGS: dict[str, dict[str, str]] = {
+    "120b_vs_20b": {
+        "negotiator_model": "openai/gpt-oss-120b",
+        "mediator_model": "openai/gpt-oss-20b",
+    },
+    "20b_vs_20b": {
+        "negotiator_model": "openai/gpt-oss-20b",
+        "mediator_model": "openai/gpt-oss-20b",
+    },
+    "120b_vs_120b": {
+        "negotiator_model": "openai/gpt-oss-120b",
+        "mediator_model": "openai/gpt-oss-120b",
+    },
     "70b_vs_8b": {
-        "negotiator_model": "llama-3.3-70b-versatile",
-        "mediator_model": "llama-3.1-8b-instant",
-    },
-    "8b_vs_8b": {
-        "negotiator_model": "llama-3.1-8b-instant",
-        "mediator_model": "llama-3.1-8b-instant",
-    },
-    "70b_vs_70b": {
-        "negotiator_model": "llama-3.3-70b-versatile",
-        "mediator_model": "llama-3.3-70b-versatile",
+        "negotiator_model": "openai/gpt-oss-120b",
+        "mediator_model": "openai/gpt-oss-20b",
     },
 }
 
@@ -115,8 +119,12 @@ def evaluate_outcome(
     proposal: dict[str, float],
     profiles: list[StakeholderProfile],
     issues: list[dict],
-    resolution: int = 40,
+    resolution: int | None = None,
 ) -> tuple[ParetoMetrics, FairnessMetrics, dict[str, float]]:
+    if resolution is None:
+        n_iss = max(1, len(issues))
+        resolution = max(5, min(20, int(10_000 ** (1.0 / n_iss))))
+
     per_agent = {p.name: p.evaluate_proposal(proposal) for p in profiles}
     utility_functions = [p.utility_function for p in profiles]
     outcome_u = np.array(list(per_agent.values()))

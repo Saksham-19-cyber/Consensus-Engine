@@ -47,20 +47,23 @@ def compute_pareto_frontier(
     if len(unique_utilities) == 0:
         return np.array([])
 
-    frontier_mask = np.ones(len(unique_utilities), dtype=bool)
-    for i in range(len(unique_utilities)):
-        if not frontier_mask[i]:
-            continue
-        u_i = unique_utilities[i]
-        for j in range(len(unique_utilities)):
-            if i == j or not frontier_mask[j]:
-                continue
-            u_j = unique_utilities[j]
-            if np.all(u_j >= u_i) and np.any(u_j > u_i):
-                frontier_mask[i] = False
-                break
+    # Accelerated non-dominated filtering: sort descending by social welfare sum.
+    # A candidate point can only be dominated by an already admitted frontier point.
+    sums = np.sum(unique_utilities, axis=1)
+    order = np.argsort(-sums)
+    sorted_pts = unique_utilities[order]
 
-    return unique_utilities[frontier_mask]
+    frontier = []
+    for pt in sorted_pts:
+        dominated = False
+        for f in frontier:
+            if np.all(f >= pt) and np.any(f > pt):
+                dominated = True
+                break
+        if not dominated:
+            frontier.append(pt)
+
+    return np.array(frontier)
 
 
 def pareto_distance(

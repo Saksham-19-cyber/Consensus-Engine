@@ -4,8 +4,8 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     groq_api_key: str = ""
-    negotiator_model: str = "llama-3.3-70b-versatile"
-    mediator_model: str = "llama-3.1-8b-instant"
+    negotiator_model: str = "openai/gpt-oss-120b"
+    mediator_model: str = "openai/gpt-oss-20b"
     max_rounds: int = 10
     max_retries: int = 3
     temperature: float = 0.7

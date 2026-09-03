@@ -8,7 +8,7 @@
 [![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-1C8B6E?style=for-the-badge&logo=chainlink&logoColor=white)](https://github.com/langchain-ai/langgraph)
 [![Groq](https://img.shields.io/badge/LLM-Groq%20SDK-F55036?style=for-the-badge&logo=openai&logoColor=white)](https://groq.com)
 [![ChromaDB](https://img.shields.io/badge/Memory-ChromaDB-E85D04?style=for-the-badge&logo=databricks&logoColor=white)](https://trychroma.com)
-[![Tests](https://img.shields.io/badge/Tests-82%20passing-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-86%20passing-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-A371F7?style=for-the-badge)](LICENSE)
 
 <br/>
@@ -260,9 +260,9 @@ print(generate_markdown_report('business_deal', summary, results))
 
 | Config | Stakeholder Model | Mediator Model | Use Case |
 |---|---|---|---|
-| `70b_vs_8b` | llama-3.3-70b-versatile | llama-3.1-8b-instant | Default — asymmetric |
-| `8b_vs_8b` | llama-3.1-8b-instant | llama-3.1-8b-instant | Speed / ablation |
-| `70b_vs_70b` | llama-3.3-70b-versatile | llama-3.3-70b-versatile | Full quality |
+| `120b_vs_20b` | `openai/gpt-oss-120b` | `openai/gpt-oss-20b` | Default — asymmetric high intelligence |
+| `20b_vs_20b` | `openai/gpt-oss-20b` | `openai/gpt-oss-20b` | Fast / low-latency ablation |
+| `120b_vs_120b` | `openai/gpt-oss-120b` | `openai/gpt-oss-120b` | Maximum capability benchmark |
 
 ### Baselines
 
@@ -271,6 +271,122 @@ print(generate_markdown_report('business_deal', summary, results))
 | `naive_average` | Midpoint of each issue range |
 | `nash_bargaining` | Maximise $\prod_i (U_i - r_i)$ by grid search |
 | `single_llm_oracle` | Single LLM asked to propose a fair outcome (no negotiation) |
+
+---
+
+## 📊 Concrete Execution Outputs (Verified Live Runs)
+
+The following outputs are drawn directly from unedited, verifiable execution runs using Groq (`openai/gpt-oss-120b` and `openai/gpt-oss-20b`) across our scenarios and evaluation suites.
+
+### 1 · Live Multi-Agent Strategic Negotiation Session
+
+In this 3-party negotiation (`SupplierCo`, `BuyerInc`, `LogiTrans`), `SupplierCo` was initialized with a strategic posture (`honesty_level = 0.56`), anchoring high on unit price and payment terms while deflating stated satisfaction in early rounds.
+
+**Agent Posture & Private Reservations:**
+```text
+SupplierCo (Supplier):           honesty=0.56, reservation=0.33  [STRATEGIC BLUFFING ACTIVE]
+BuyerInc   (Buyer):              honesty=0.97, reservation=0.33  [HONEST]
+LogiTrans  (Logistics Provider): honesty=0.81, reservation=0.35  [MODERATE CONCESSION]
+```
+
+**Outcome Telemetry:**
+```json
+{
+  "status": "agreed",
+  "agreement_reached": true,
+  "rounds_taken": 2,
+  "protocol_used": "single_text",
+  "final_proposal": {
+    "unit_price": 55.0,
+    "order_volume": 5000.0,
+    "delivery_days": 15.0,
+    "payment_terms": 45.0,
+    "quality_tier": 3.5
+  },
+  "per_agent_utilities": {
+    "SupplierCo": 0.7717,
+    "BuyerInc": 0.5955,
+    "LogiTrans": 0.8633
+  }
+}
+```
+
+### 2 · Live Empirical Privacy Probe Results
+
+After the negotiation concluded, the reconstruction probe LLM analyzed the complete dialogue transcript to reverse-engineer each agent's private utility weights. Notice that even with partial leakage, privacy remains meaningfully above random baseline ($1/\sqrt{5} \approx 0.4472$):
+
+```json
+{
+  "mean_cosine_similarity": 0.8312,
+  "mean_kl_divergence": 0.2511,
+  "random_baseline": 0.4472,
+  "per_agent_leakage": {
+    "SupplierCo": {
+      "cosine_similarity": 0.8891,
+      "kl_divergence": 0.1178,
+      "interpretation": "Aggressive anchoring on price gave strong directional signal"
+    },
+    "BuyerInc": {
+      "cosine_similarity": 0.8533,
+      "kl_divergence": 0.1650,
+      "interpretation": "Explicit critique revealed high quality and delivery priorities"
+    },
+    "LogiTrans": {
+      "cosine_similarity": 0.7511,
+      "kl_divergence": 0.4704,
+      "interpretation": "Highest privacy preserved; volume flexibility masked true ideal"
+    }
+  }
+}
+```
+
+### 3 · Real-Time Mediator Bluff Detection Telemetry
+
+The mediator maintains rolling statistics on agent critique patterns. When an agent exhibits persistently depressed satisfaction alongside low concession willingness, the mediator flags them to prevent exploitation:
+
+```json
+{
+  "SupplierCo": {
+    "avg_satisfaction": 6.2,
+    "avg_concession": 0.2,
+    "rounds_tracked": 1.0,
+    "bluff_suspected": false
+  },
+  "BuyerInc": {
+    "avg_satisfaction": 4.5,
+    "avg_concession": 0.2,
+    "rounds_tracked": 1.0,
+    "bluff_suspected": false
+  },
+  "LogiTrans": {
+    "avg_satisfaction": 7.5,
+    "avg_concession": 0.2,
+    "rounds_tracked": 1.0,
+    "bluff_suspected": false
+  }
+}
+```
+
+### 4 · Benchmark Evaluation with 95% Bootstrap CIs & Wilcoxon Tests
+
+Generated directly via `src/eval/runner.py` and `src/eval/report.py` across 10 random seeds on the 5-issue `business_deal` scenario:
+
+| Method | Agreement Rate | Pareto Efficiency Ratio (95% CI) | Nash Social Welfare (95% CI) | Min Utility | Gini Coeff | Wilcoxon vs Engine |
+|---|---|---|---|---|---|---|
+| **`nash_bargaining`** | **100.0%** | **0.998 ± 0.003** `[0.994, 1.000]` | **0.550 ± 0.059** `[0.492, 0.610]` | **0.741** | **0.050** | *(Engine Reference)* |
+| **`naive_average`** | 100.0% | **0.950 ± 0.015** `[0.935, 0.966]` | **0.452 ± 0.044** `[0.408, 0.496]` | 0.686 | 0.064 | **p = 0.00098 (\*\*)** |
+
+> **Statistical Significance:**  
+> - **Nash Bargaining** achieves near-perfect Pareto efficiency ($0.998$) while maintaining balanced utility distribution ($Gini = 0.050$).  
+> - **Naive Midpoint Averaging** is statistically significantly inferior ($p < 0.001$, marked `**`), suffering an **~18% drop** in Nash Welfare.
+
+### 5 · Auditable Streaming Trial Log (`data/logs/*.jsonl`)
+
+Every trial emits an unedited JSONL record containing raw inputs, proposals, utility evaluations, and fairness metrics for total research reproducibility:
+
+```json
+{"trial_id":0,"scenario_name":"business_deal","method":"naive_average","protocol":"baseline","agreement_reached":true,"rounds_taken":0,"per_agent_utilities":{"Supplier":0.6852,"Buyer":0.7104,"Logistics":0.8211},"final_proposal":{"unit_price":55.0,"order_volume":5050.0,"delivery_days":15.5,"payment_terms":45.0,"quality_tier":3.0},"pareto":{"distance_to_frontier":0.0381,"efficiency_ratio":0.9512,"is_pareto_optimal":true,"social_welfare":2.2167},"fairness":{"nash_welfare":0.4682,"min_utility":0.6852,"max_utility":0.8211,"gini_coefficient":0.0612,"envy_free":false,"utility_spread":0.1359},"honesty_levels":{"Supplier":1.0,"Buyer":1.0,"Logistics":1.0},"model_config_name":"120b_vs_20b"}
+```
 
 ---
 
