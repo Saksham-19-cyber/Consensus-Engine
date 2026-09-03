@@ -161,19 +161,19 @@ scenarios/
 
 For agent $i$ evaluating a proposal vector $\mathbf{x} = (x_1, \ldots, x_K)$ over $K$ issues with ranges $[x_k^{\min}, x_k^{\max}]$:
 
-$$U_i(\mathbf{x}) = \sum_{k=1}^{K} w_{i,k} \cdot \left(1 - \frac{|x_k - x_{i,k}^{*}|}{x_k^{\max} - x_k^{\min}}\right), \quad \sum_{k=1}^K w_{i,k} = 1$$
+$$U_i(\mathbf{x}) = \sum_{k=1}^{K} w_{i,k} \cdot \left(1 - \frac{|x_k - x_{i,k}^{\ast}|}{x_k^{\max} - x_k^{\min}}\right), \quad \sum_{k=1}^K w_{i,k} = 1$$
 
-Weights $w_{i,k}$ and ideal values $x_{i,k}^{*}$ are **never transmitted** — only communicated indirectly through strategic language.
+Weights $w_{i,k}$ and ideal values $x_{i,k}^{\ast}$ are **never transmitted** — only communicated indirectly through strategic language.
 
 ### Nash Social Welfare
 
-$$\text{NSW}(\mathbf{x}^{*}) = \left(\prod_{i=1}^{N} \max\left(U_i(\mathbf{x}^{*}) - r_i,\ \varepsilon\right)\right)^{1/N}$$
+$$\text{NSW}(\mathbf{x}^{\ast}) = \left(\prod_{i=1}^{N} \max\left(U_i(\mathbf{x}^{\ast}) - r_i,\ \varepsilon\right)\right)^{1/N}$$
 
 where $r_i$ is agent $i$'s reservation value and $\varepsilon = 10^{-10}$.
 
 ### Pareto Efficiency Ratio
 
-$$\text{PER}(\mathbf{x}^{*}) = \frac{\sum_{i=1}^{N} U_i(\mathbf{x}^{*})}{\displaystyle\max_{\mathbf{x} \in \mathcal{F}} \sum_{i=1}^{N} U_i(\mathbf{x})}$$
+$$\text{PER}(\mathbf{x}^{\ast}) = \frac{\sum_{i=1}^{N} U_i(\mathbf{x}^{\ast})}{\displaystyle\max_{\mathbf{x} \in \mathcal{F}} \sum_{i=1}^{N} U_i(\mathbf{x})}$$
 
 where $\mathcal{F}$ is the Pareto frontier computed by grid search over the issue space.
 
