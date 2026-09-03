@@ -3,6 +3,9 @@ name = "consensus-engine"
 version = "0.1.0"
 description = "Multi-agent negotiation under private information"
 requires-python = ">=3.11"
+
+[tool.poetry]
+package-mode = false
 dependencies = [
     "groq>=0.11.0",
     "langgraph>=0.2.0",

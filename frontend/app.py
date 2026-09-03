@@ -1,9 +1,13 @@
+import os
 import streamlit as st
 import requests
 import json
 import time
 
-API_BASE = "http://localhost:8000/api"
+try:
+    API_BASE = st.secrets.get("API_BASE", os.getenv("API_BASE", "http://localhost:8000/api"))
+except Exception:
+    API_BASE = os.getenv("API_BASE", "http://localhost:8000/api")
 
 st.set_page_config(
     page_title="Consensus Engine",
@@ -93,9 +97,43 @@ with tab1:
                 }, timeout=300)
                 data = resp.json()
                 st.session_state["last_result"] = data
-            except Exception as e:
-                st.error(f"Error: {e}")
-                data = None
+            except Exception as net_err:
+                # Standalone fallback: execute negotiation graph directly in Python
+                try:
+                    from scenarios.generator import get_scenario
+                    from src.protocol.graph import run_negotiation
+                    from src.models.negotiation import NegotiationMessage
+
+                    kwargs = {"n_agents": n_agents} if scenario == "trip_planning" else {}
+                    sc_obj = get_scenario(scenario, **kwargs)
+                    profiles, issues = sc_obj.generate(seed=seed)
+
+                    collected_msgs = []
+                    def _on_msg(msg: NegotiationMessage):
+                        collected_msgs.append({
+                            "agent_name": msg.agent_name,
+                            "role": msg.role,
+                            "round_number": msg.round_number,
+                            "content": msg.content,
+                            "metadata": msg.metadata,
+                        })
+
+                    outcome = run_negotiation(
+                        profiles=profiles,
+                        issues=issues,
+                        max_rounds=max_rounds,
+                        on_message=_on_msg,
+                    )
+                    data = {
+                        "session_id": "standalone-cloud",
+                        "scenario": scenario,
+                        "outcome": outcome.model_dump(),
+                        "messages": collected_msgs,
+                    }
+                    st.session_state["last_result"] = data
+                except Exception as inner_err:
+                    st.error(f"Error connecting to backend ({net_err}) and in-process fallback failed: {inner_err}")
+                    data = None
 
         if data:
             outcome = data.get("outcome", {})
