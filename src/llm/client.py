@@ -153,6 +153,9 @@ def structured_completion(
         except APIError as e:
             last_error = e
             logger.error("groq api error: %s", e)
+            time.sleep(1.0)
+            if "json_validate_failed" in str(e) or "response_format" in str(e):
+                response_format = None
             if attempt == max_retries - 1:
                 raise
 
