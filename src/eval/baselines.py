@@ -33,7 +33,7 @@ def naive_average_baseline(
 def nash_bargaining_baseline(
     profiles: list[StakeholderProfile],
     issues: list[dict],
-    resolution: int = 20,
+    resolution: int = 12,
 ) -> dict[str, float]:
     issue_names = [i["name"] for i in issues]
     grids = [np.linspace(i["range"][0], i["range"][1], resolution) for i in issues]

@@ -66,9 +66,21 @@ class StakeholderProfile(BaseModel):
     persona: str = ""
     utility_function: UtilityFunction
     reservation_value: float = Field(default=0.4, ge=0.0, le=1.0)
+    # Strategic misrepresentation parameters (1.0 = fully honest, 0.0 = maximum bluffing)
+    honesty_level: float = Field(default=1.0, ge=0.0, le=1.0)
+    # Per-issue inflation offsets applied to stated (not true) ideal values.
+    # Positive = demands higher than true ideal; negative = demands lower.
+    # Only used when honesty_level < 1.0. Populated by scenario generators.
+    strategic_bias: dict[str, float] = Field(default_factory=dict)
 
     def evaluate_proposal(self, proposal: dict[str, float]) -> float:
+        """Evaluates against the TRUE utility function — never manipulated."""
         return self.utility_function.score(proposal)
 
     def would_accept(self, proposal: dict[str, float]) -> bool:
+        """Acceptance check always uses TRUE utility, regardless of honesty_level."""
         return self.evaluate_proposal(proposal) >= self.reservation_value
+
+    @property
+    def is_strategic(self) -> bool:
+        return self.honesty_level < 1.0

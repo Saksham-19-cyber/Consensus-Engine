@@ -11,6 +11,11 @@ from src.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Bluff detection thresholds
+_BLUFF_SAT_CEILING = 4.0   # satisfaction score consistently below this
+_BLUFF_CONCESSION_CEILING = 0.2  # concession_willingness consistently below this
+_BLUFF_HISTORY_WINDOW = 3   # number of rounds to look back
+
 
 class MediatorAgent:
     def __init__(self, agent_names: list[str], issues: list[dict]):
@@ -18,9 +23,30 @@ class MediatorAgent:
         self.issues = issues
         self.concession_history: dict[str, list[float]] = {n: [] for n in agent_names}
         self.round_number = 0
+        # Rolling history of (satisfaction, concession_willingness) per agent for bluff detection
+        self._critique_history: dict[str, list[tuple[float, float]]] = {n: [] for n in agent_names}
 
-    def propose_initial(self) -> MediatorResponse:
+    def propose_initial(
+        self,
+        scenario_name: str | None = None,
+    ) -> MediatorResponse:
         self.round_number = 1
+
+        # Component 6: fetch precedents from ChromaDB if available
+        precedents: list[dict] = []
+        if scenario_name:
+            try:
+                from src.memory.store import retrieve_similar_outcomes
+                raw = retrieve_similar_outcomes(scenario_name, n_results=3)
+                for entry in raw:
+                    outcome = entry.get("outcome", {})
+                    if outcome.get("agreement_reached") and outcome.get("final_proposal"):
+                        precedents.append({
+                            "final_proposal": outcome["final_proposal"],
+                            "per_agent_utilities": outcome.get("per_agent_utilities", {}),
+                        })
+            except Exception as e:
+                logger.warning("precedent fetch failed: %s", e)
 
         system_prompt = build_mediator_system_prompt(
             agent_names=self.agent_names,
@@ -29,7 +55,7 @@ class MediatorAgent:
             max_rounds=settings.max_rounds,
         )
 
-        user_prompt = build_mediator_initial_prompt(self.issues)
+        user_prompt = build_mediator_initial_prompt(self.issues, precedents=precedents or None)
 
         response = structured_completion(
             messages=[
@@ -51,7 +77,13 @@ class MediatorAgent:
 
         response.revised_proposal = self._clamp_proposal(response.revised_proposal)
 
-        logger.info("mediator initial proposal: %s", response.revised_proposal)
+        if precedents:
+            logger.info(
+                "mediator initial proposal (with %d precedents): %s",
+                len(precedents), response.revised_proposal,
+            )
+        else:
+            logger.info("mediator initial proposal: %s", response.revised_proposal)
         return response
 
     def revise_proposal(
@@ -66,6 +98,10 @@ class MediatorAgent:
             name = c.agent_name
             if name in self.concession_history:
                 self.concession_history[name].append(c.concession_willingness)
+            if name in self._critique_history:
+                self._critique_history[name].append(
+                    (c.satisfaction_score, c.concession_willingness)
+                )
 
         all_accept = all(c.acceptable for c in critiques)
         if all_accept:
@@ -90,6 +126,9 @@ class MediatorAgent:
                 reasoning="Insufficient concession willingness detected across majority of parties.",
                 round_number=round_number,
             )
+
+        # Bluff detection — pass suspects to revision prompt
+        bluff_suspects = self.detect_bluffing()
 
         system_prompt = build_mediator_system_prompt(
             agent_names=self.agent_names,
@@ -116,6 +155,7 @@ class MediatorAgent:
             current_proposal=current_proposal,
             concession_history=self.concession_history,
             round_number=round_number,
+            bluff_suspects=bluff_suspects if bluff_suspects else None,
         )
 
         response = structured_completion(
@@ -135,12 +175,59 @@ class MediatorAgent:
 
         response.revised_proposal = self._clamp_proposal(response.revised_proposal)
 
+        if bluff_suspects:
+            response.detected_patterns = list(response.detected_patterns or []) + [
+                f"BLUFF_SUSPECTED:{name}" for name in bluff_suspects
+            ]
+
         logger.info(
-            "mediator round=%d action=%s proposal=%s",
-            round_number, response.action, response.revised_proposal,
+            "mediator round=%d action=%s proposal=%s bluff_suspects=%s",
+            round_number, response.action, response.revised_proposal, bluff_suspects,
         )
 
         return response
+
+    def detect_bluffing(self) -> list[str]:
+        """
+        Identify agents showing the bluffing signature:
+        consistently low satisfaction AND consistently low concession willingness
+        across the last _BLUFF_HISTORY_WINDOW rounds.
+
+        Returns a list of suspect agent names (empty if none detected).
+
+        This is a heuristic — it flags agents for mediator awareness but does
+        not definitively prove strategic misrepresentation.
+        """
+        suspects = []
+        for name, history in self._critique_history.items():
+            if len(history) < _BLUFF_HISTORY_WINDOW:
+                continue
+            recent = history[-_BLUFF_HISTORY_WINDOW:]
+            avg_sat = sum(s for s, _ in recent) / len(recent)
+            avg_conc = sum(c for _, c in recent) / len(recent)
+            if avg_sat < _BLUFF_SAT_CEILING and avg_conc < _BLUFF_CONCESSION_CEILING:
+                suspects.append(name)
+                logger.info(
+                    "bluff_detection: agent=%s avg_satisfaction=%.2f avg_concession=%.3f → SUSPECT",
+                    name, avg_sat, avg_conc,
+                )
+        return suspects
+
+    def get_bluff_detection_scores(self) -> dict[str, dict[str, float]]:
+        """
+        Return the raw bluff-detection signal per agent for eval/reporting.
+        """
+        scores = {}
+        for name, history in self._critique_history.items():
+            if not history:
+                scores[name] = {"avg_satisfaction": 0.0, "avg_concession": 0.0, "rounds": 0}
+            else:
+                scores[name] = {
+                    "avg_satisfaction": round(sum(s for s, _ in history) / len(history), 3),
+                    "avg_concession": round(sum(c for _, c in history) / len(history), 3),
+                    "rounds": len(history),
+                }
+        return scores
 
     def _clamp_proposal(self, proposal: dict[str, float]) -> dict[str, float]:
         issue_map = {i["name"]: i for i in self.issues}
@@ -155,4 +242,5 @@ class MediatorAgent:
 
     def reset(self):
         self.concession_history = {n: [] for n in self.agent_names}
+        self._critique_history = {n: [] for n in self.agent_names}
         self.round_number = 0

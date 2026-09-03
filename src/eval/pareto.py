@@ -14,7 +14,7 @@ def is_dominated(u: np.ndarray, candidates: np.ndarray) -> bool:
 def compute_pareto_frontier(
     utility_functions: list[UtilityFunction],
     issues: list[dict],
-    resolution: int = 20,
+    resolution: int = 12,
 ) -> np.ndarray:
     issue_names = [i["name"] for i in issues]
     grids = [np.linspace(i["range"][0], i["range"][1], resolution) for i in issues]

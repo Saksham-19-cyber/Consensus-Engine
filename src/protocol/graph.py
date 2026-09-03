@@ -7,6 +7,7 @@ from langgraph.graph import StateGraph, START, END
 from src.protocol.state import NegotiationState
 from src.protocol.rules import ProtocolRules
 from src.agents.stakeholder import StakeholderAgent
+from src.agents.strategic_stakeholder import StrategicStakeholderAgent
 from src.agents.mediator import MediatorAgent
 from src.models.utility import StakeholderProfile, UtilityFunction, Issue
 from src.models.negotiation import (
@@ -20,16 +21,27 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 
+def _make_stakeholder_agent(profile: StakeholderProfile) -> StakeholderAgent:
+    """
+    Return a StrategicStakeholderAgent if the profile has honesty_level < 1.0,
+    otherwise the standard StakeholderAgent.
+    """
+    if profile.is_strategic:
+        return StrategicStakeholderAgent(profile)
+    return StakeholderAgent(profile)
+
+
 def build_negotiation_graph(
     profiles: list[StakeholderProfile],
     issues: list[dict],
     rules: ProtocolRules | None = None,
     on_message: callable | None = None,
+    scenario_name: str | None = None,
 ):
     rules = rules or ProtocolRules()
     agent_names = [p.name for p in profiles]
 
-    stakeholder_agents = {p.name: StakeholderAgent(p) for p in profiles}
+    stakeholder_agents = {p.name: _make_stakeholder_agent(p) for p in profiles}
     mediator = MediatorAgent(agent_names, issues)
 
     def emit(msg: NegotiationMessage):
@@ -41,7 +53,7 @@ def build_negotiation_graph(
         critiques_raw = state.get("critiques", [])
 
         if round_num == 0:
-            response = mediator.propose_initial()
+            response = mediator.propose_initial(scenario_name=scenario_name)
             emit(NegotiationMessage(
                 role="mediator",
                 agent_name="Mediator",
@@ -91,6 +103,7 @@ def build_negotiation_graph(
                     "reasoning": response.reasoning,
                     "patterns": response.detected_patterns,
                     "issue_linkage": response.issue_linkage,
+                    "bluff_detection_scores": mediator.get_bluff_detection_scores(),
                 },
             ))
 
@@ -140,6 +153,7 @@ def build_negotiation_graph(
                     "acceptable": critique.acceptable,
                     "issues_to_improve": critique.issues_to_improve,
                     "reasoning": critique.reasoning,
+                    "honesty_level": getattr(agent.profile, "honesty_level", 1.0),
                 },
             ))
 
@@ -182,6 +196,8 @@ def build_negotiation_graph(
                 status=status_map.get(reason, NegotiationStatus.MAX_ROUNDS),
                 rounds_taken=state["round_number"],
                 agreement_reached=reason == "agreed",
+                protocol_used="single_text",
+                bluff_detection_scores=mediator.get_bluff_detection_scores(),
             )
 
             return {
@@ -219,44 +235,86 @@ def run_negotiation(
     issues: list[dict],
     max_rounds: int | None = None,
     on_message: callable | None = None,
+    scenario_name: str | None = None,
+    protocol: str = "single_text",
 ) -> NegotiationOutcome:
-    rules = ProtocolRules(max_rounds=max_rounds or settings.max_rounds)
+    """
+    Run a negotiation session.
 
-    graph, stakeholder_agents, mediator = build_negotiation_graph(
-        profiles=profiles,
-        issues=issues,
-        rules=rules,
-        on_message=on_message,
-    )
+    Args:
+        profiles: Stakeholder profiles (honesty_level < 1.0 → strategic agent automatically used)
+        issues: Issue definitions with name and range
+        max_rounds: Override max rounds from settings
+        on_message: Callback for real-time message streaming
+        scenario_name: Used for ChromaDB precedent lookup and outcome storage
+        protocol: "single_text" (mediated) or "alternating_offers" (direct)
+    """
+    if protocol == "alternating_offers":
+        from src.protocol.alternating_offers import run_alternating_offers
+        outcome = run_alternating_offers(
+            profiles=profiles,
+            issues=issues,
+            max_rounds=max_rounds or settings.max_rounds,
+            on_message=on_message,
+        )
+    else:
+        rules = ProtocolRules(max_rounds=max_rounds or settings.max_rounds)
 
-    initial_state: NegotiationState = {
-        "round_number": 0,
-        "max_rounds": rules.max_rounds,
-        "current_proposal": {},
-        "critiques": [],
-        "history": [],
-        "concession_tracker": {},
-        "agent_names": [p.name for p in profiles],
-        "issues": issues,
-        "profiles_json": [p.model_dump() for p in profiles],
-        "outcome": None,
-        "status": "in_progress",
-    }
+        graph, stakeholder_agents, mediator = build_negotiation_graph(
+            profiles=profiles,
+            issues=issues,
+            rules=rules,
+            on_message=on_message,
+            scenario_name=scenario_name,
+        )
 
-    final_state = graph.invoke(initial_state)
+        initial_state: NegotiationState = {
+            "round_number": 0,
+            "max_rounds": rules.max_rounds,
+            "current_proposal": {},
+            "critiques": [],
+            "history": [],
+            "concession_tracker": {},
+            "agent_names": [p.name for p in profiles],
+            "issues": issues,
+            "profiles_json": [p.model_dump() for p in profiles],
+            "outcome": None,
+            "status": "in_progress",
+        }
 
-    if final_state.get("outcome"):
-        return NegotiationOutcome(**final_state["outcome"])
+        final_state = graph.invoke(initial_state)
 
-    proposal = final_state.get("current_proposal", {})
-    per_agent_utilities = {}
-    for name, agent in stakeholder_agents.items():
-        per_agent_utilities[name] = agent.evaluate_proposal(proposal)
+        if final_state.get("outcome"):
+            outcome = NegotiationOutcome(**final_state["outcome"])
+        else:
+            proposal = final_state.get("current_proposal", {})
+            per_agent_utilities = {}
+            for name, agent in stakeholder_agents.items():
+                per_agent_utilities[name] = agent.evaluate_proposal(proposal)
 
-    return NegotiationOutcome(
-        final_proposal=proposal,
-        per_agent_utilities=per_agent_utilities,
-        status=NegotiationStatus.MAX_ROUNDS,
-        rounds_taken=final_state.get("round_number", 0),
-        agreement_reached=False,
-    )
+            outcome = NegotiationOutcome(
+                final_proposal=proposal,
+                per_agent_utilities=per_agent_utilities,
+                status=NegotiationStatus.MAX_ROUNDS,
+                rounds_taken=final_state.get("round_number", 0),
+                agreement_reached=False,
+                protocol_used=protocol,
+            )
+
+    # Component 6: store outcome in ChromaDB for future precedent retrieval
+    if scenario_name and outcome.final_proposal:
+        try:
+            import uuid
+            from src.memory.store import store_negotiation_outcome
+            store_negotiation_outcome(
+                session_id=str(uuid.uuid4()),
+                scenario_name=scenario_name,
+                outcome=outcome.model_dump(),
+                profiles=[p.model_dump() for p in profiles],
+                issues=issues,
+            )
+            logger.info("stored negotiation outcome for scenario=%s", scenario_name)
+        except Exception as e:
+            logger.warning("outcome storage failed: %s", e)
+
+    return outcome

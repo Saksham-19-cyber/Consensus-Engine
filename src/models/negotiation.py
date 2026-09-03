@@ -32,6 +32,22 @@ class MediatorAction(str, Enum):
     DECLARE_AGREEMENT = "declare_agreement"
 
 
+class AgentAction(str, Enum):
+    """Actions available in the alternating-offers protocol."""
+    ACCEPT = "accept"
+    COUNTEROFFER = "counteroffer"
+    WALK_AWAY = "walk_away"
+
+
+class CounterOffer(BaseModel):
+    """An agent's direct counter-proposal in the alternating-offers protocol."""
+    agent_name: str
+    action: AgentAction
+    proposal: dict[str, float] = Field(default_factory=dict)
+    reasoning: str = ""
+    round_number: int = 0
+
+
 class MediatorResponse(BaseModel):
     action: MediatorAction
     revised_proposal: dict[str, float] = Field(default_factory=dict)
@@ -65,3 +81,7 @@ class NegotiationOutcome(BaseModel):
     rounds_taken: int = 0
     agreement_reached: bool = False
     messages: list[NegotiationMessage] = Field(default_factory=list)
+    # Which protocol was used to reach this outcome
+    protocol_used: str = "single_text"
+    # Bluff detection scores from the mediator (empty for alternating-offers)
+    bluff_detection_scores: dict[str, dict[str, float]] = Field(default_factory=dict)
