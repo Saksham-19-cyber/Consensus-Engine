@@ -1,16 +1,34 @@
 import spaces
 import os
 import gradio as gr
-from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.middleware.cors import CORSMiddleware
-from src.api.routes import router
-from src.persistence.database import init_db
+from fastapi.responses import JSONResponse
+from src.api.main import app as fastapi_app
 
-@spaces.GPU
-def gpu_health_check(text: str) -> str:
-    return f"ZeroGPU active: {text}"
+# ZeroGPU hook to satisfy Hugging Face startup check
+try:
+    import spaces
+    @spaces.GPU
+    def gpu_health_check(text: str) -> str:
+        return f"ZeroGPU active: {text}"
+except Exception:
+    pass
 
-# Create Gradio UI
+# Explicit Health check route on root FastAPI app
+@fastapi_app.get("/api/health")
+def api_health():
+    return {"status": "ok", "service": "consensus-engine"}
+
+@fastapi_app.get("/")
+def api_root():
+    return {
+        "status": "ok",
+        "service": "consensus-engine",
+        "docs": "/docs",
+        "health": "/api/health",
+        "ui": "/ui"
+    }
+
+# Create Gradio UI for Hugging Face Space & ZeroGPU
 with gr.Blocks(title="Consensus Engine API") as demo:
     gr.Markdown("# 🤖 Consensus Engine API Service")
     gr.Markdown(
@@ -30,34 +48,11 @@ with gr.Blocks(title="Consensus Engine API") as demo:
     btn = gr.Button("Verify ZeroGPU Engine")
     btn.click(fn=gpu_health_check, inputs=inp, outputs=out)
 
-# 1. Add CORS middleware
-demo.app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# 2. Add Swagger UI at /docs
-@demo.app.get("/docs", include_in_schema=False)
-async def custom_swagger():
-    return get_swagger_ui_html(
-        openapi_url="/openapi.json",
-        title="Consensus Engine - Swagger UI"
-    )
-
-# 3. Add Health check at /api/health
-@demo.app.get("/api/health")
-def api_health():
-    return {"status": "ok", "service": "consensus-engine"}
-
-# 4. Include all Consensus Engine API routes
-demo.app.include_router(router, prefix="/api")
-
-@demo.app.on_event("startup")
-async def on_startup():
-    await init_db()
+# Mount Gradio onto the existing FastAPI application at /ui
+app = gr.mount_gradio_app(fastapi_app, demo, path="/ui")
 
 if __name__ == "__main__":
-    demo.queue().launch()
+    import uvicorn
+    port = int(os.environ.get("PORT", 7860))
+    print(f"Starting Consensus Engine on port {port}...")
+    uvicorn.run(app, host="0.0.0.0", port=port)
