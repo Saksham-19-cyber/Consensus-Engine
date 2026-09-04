@@ -1,17 +1,12 @@
+import spaces
 import os
 import gradio as gr
 from fastapi.responses import JSONResponse
 from src.api.main import app as fastapi_app
 
-# ZeroGPU hook explicitly attached to a Gradio event listener
-try:
-    import spaces
-    @spaces.GPU
-    def gpu_health_check(text: str) -> str:
-        return f"ZeroGPU active: {text}"
-except Exception:
-    def gpu_health_check(text: str) -> str:
-        return f"Engine active: {text}"
+@spaces.GPU
+def gpu_health_check(text: str) -> str:
+    return f"ZeroGPU active: {text}"
 
 # Root endpoint for API discovery
 @fastapi_app.get("/")
