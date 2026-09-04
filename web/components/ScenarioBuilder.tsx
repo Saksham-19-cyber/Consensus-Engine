@@ -49,10 +49,10 @@ import {
 const ExploratorBanner: React.FC<{ compact?: boolean }> = ({ compact }) => (
   <div
     id="exploratory-mode-banner"
-    className={`flex items-start gap-3 rounded-xl border border-amber-700/60 bg-amber-950/30 px-4 ${compact ? 'py-2.5' : 'py-4'}`}
+    className={`flex items-start gap-3 rounded-xl border border-amber-700/60 bg-amber-950/30 px-4 w-full max-w-full overflow-hidden ${compact ? 'py-2.5' : 'py-4'}`}
   >
     <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
-    <div>
+    <div className="min-w-0 flex-1 break-words">
       <p className="text-sm font-semibold text-amber-300">
         Exploratory Mode — Results Are Not Statistically Validated
       </p>
@@ -110,12 +110,12 @@ const InputScreen: React.FC<InputScreenProps> = ({
   onSeedChange,
   onParse,
 }) => (
-  <div className="space-y-6 max-w-4xl mx-auto">
+  <div className="space-y-6 max-w-4xl mx-auto w-full">
     <ExploratorBanner />
 
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-xl space-y-4">
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 sm:p-6 backdrop-blur-xl space-y-4 w-full max-w-full overflow-hidden">
       <div className="flex items-center gap-2 mb-2">
-        <FlaskConical className="w-5 h-5 text-amber-400" />
+        <FlaskConical className="w-5 h-5 text-amber-400 shrink-0" />
         <h2 className="text-lg font-semibold text-zinc-100">Describe Your Negotiation</h2>
       </div>
 
@@ -127,7 +127,7 @@ const InputScreen: React.FC<InputScreenProps> = ({
         <span className="text-amber-300 font-mono">LLM-inferred</span> in the confirmation step.
       </p>
 
-      <div>
+      <div className="w-full max-w-full">
         <label
           htmlFor="scenario-description"
           className="block text-xs font-medium text-zinc-400 mb-1.5"
@@ -140,7 +140,7 @@ const InputScreen: React.FC<InputScreenProps> = ({
           onChange={(e) => onDescriptionChange(e.target.value)}
           rows={10}
           placeholder={`Example:\n\nA software startup (FounderCo) is negotiating a licensing deal with a large enterprise (EnterpriseCorp). The key issues are: license fee (annual, $50k–$500k), contract duration (1–5 years), support level (basic email vs. dedicated account manager), and data usage rights (whether EnterpriseCorp can use anonymized data for their own analytics).\n\nFounderCo really needs revenue and would accept a lower fee for a longer contract. EnterpriseCorp cares most about data rights and support.`}
-          className="w-full bg-zinc-950/80 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/60 focus:ring-1 focus:ring-amber-500/20 resize-none leading-relaxed font-mono"
+          className="w-full max-w-full box-border bg-zinc-950/80 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/60 focus:ring-1 focus:ring-amber-500/20 resize-y leading-relaxed font-mono whitespace-pre-wrap break-words"
         />
         <p className="text-[11px] text-zinc-600 mt-1">
           Min 20 characters. 2–6 quantifiable issues will be extracted. More than 6 issues will be
@@ -148,8 +148,8 @@ const InputScreen: React.FC<InputScreenProps> = ({
         </p>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="w-32">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 w-full">
+        <div className="w-full sm:w-32">
           <label htmlFor="scenario-seed" className="block text-xs font-medium text-zinc-400 mb-1.5">
             Random Seed
           </label>
@@ -161,12 +161,11 @@ const InputScreen: React.FC<InputScreenProps> = ({
             className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 text-xs focus:outline-none focus:border-amber-500/60 font-mono"
           />
         </div>
-        <div className="flex-1" />
         <button
           id="parse-scenario-btn"
           onClick={onParse}
           disabled={loading || description.trim().length < 20}
-          className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-40 text-zinc-950 font-semibold px-6 py-2.5 rounded-xl shadow-lg shadow-amber-500/20 transition-all"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-40 text-zinc-950 font-semibold px-6 py-2.5 rounded-xl shadow-lg shadow-amber-500/20 transition-all"
         >
           {loading ? (
             <>
@@ -222,20 +221,20 @@ const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
   const inferredCount = parsed.stakeholders.filter((s) => s.source === 'llm_inferred').length;
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto w-full">
       <ExploratorBanner compact />
 
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           id="confirm-back-btn"
           onClick={onBack}
-          className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors shrink-0"
         >
           <ArrowLeft className="w-4 h-4" />
           Edit Description
         </button>
-        <div className="flex-1 h-px bg-zinc-800" />
+        <div className="hidden sm:block flex-1 h-px bg-zinc-800" />
         <span className="text-xs text-zinc-500">Step 2 of 3 — Confirm Parsed Scenario</span>
       </div>
 
@@ -300,17 +299,17 @@ const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
             <div
               key={sh.name}
               id={`stakeholder-card-${sh.name}`}
-              className={`rounded-xl border p-4 space-y-2 ${
+              className={`rounded-xl border p-4 space-y-2 w-full max-w-full overflow-hidden ${
                 sh.source === 'llm_inferred'
                   ? 'border-amber-800/40 bg-amber-950/10'
                   : 'border-zinc-800 bg-zinc-950/40'
               }`}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <span className="font-semibold text-zinc-100 text-sm">{sh.name}</span>
                 <span className="text-xs text-zinc-500">{sh.role}</span>
                 <SourceBadge source={sh.source} />
-                <span className="ml-auto text-xs text-zinc-500 font-mono">
+                <span className="sm:ml-auto text-xs text-zinc-500 font-mono">
                   Reservation ≥ {sh.reservation_value.toFixed(2)}
                 </span>
               </div>
@@ -388,8 +387,8 @@ const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="w-full sm:w-auto">
             <label
               htmlFor="confirm-max-rounds"
               className="block text-xs font-medium text-zinc-400 mb-1"
@@ -403,15 +402,14 @@ const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
               min={2}
               max={10}
               onChange={(e) => onMaxRoundsChange(Number(e.target.value))}
-              className="w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 text-xs focus:outline-none focus:border-emerald-500 font-mono"
+              className="w-full sm:w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 text-xs focus:outline-none focus:border-emerald-500 font-mono"
             />
           </div>
-          <div className="flex-1" />
           <button
             id="confirm-run-btn"
             onClick={onConfirm}
             disabled={running}
-            className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:opacity-40 text-zinc-950 font-semibold px-6 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:opacity-40 text-zinc-950 font-semibold px-6 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all"
           >
             {running ? (
               <>
@@ -471,11 +469,11 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({ result, parsed, onReset }
   const rounds = Array.from(roundMap.values());
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto w-full">
       {/* Pinned disclaimer — always visible at top */}
-      <div className="rounded-xl border border-amber-700/60 bg-amber-950/30 px-4 py-3 flex items-center gap-3">
+      <div className="rounded-xl border border-amber-700/60 bg-amber-950/30 px-4 py-3 flex items-center gap-3 w-full max-w-full overflow-hidden">
         <FlaskConical className="w-4 h-4 text-amber-400 shrink-0" />
-        <p className="text-xs text-amber-300">
+        <p className="text-xs text-amber-300 break-words min-w-0 flex-1">
           <strong>Results from free-form scenarios are illustrative only</strong> and are not
           covered by this project&apos;s N=30 statistical benchmarks; they should not be cited the
           same way as the business_deal or other benchmark table results.
@@ -484,16 +482,16 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({ result, parsed, onReset }
 
       {/* Outcome banner */}
       <div
-        className={`rounded-2xl border p-6 backdrop-blur-xl ${
+        className={`rounded-2xl border p-4 sm:p-6 backdrop-blur-xl w-full max-w-full overflow-hidden ${
           agreed
             ? 'border-emerald-800/60 bg-emerald-950/20'
             : 'border-rose-800/60 bg-rose-950/10'
         }`}
       >
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                 agreed
                   ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-400'
                   : 'bg-rose-500/20 border border-rose-500/40 text-rose-400'
@@ -505,8 +503,8 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({ result, parsed, onReset }
                 <XCircle className="w-6 h-6" />
               )}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-lg font-bold text-zinc-100">
                   {agreed ? 'Agreement Reached' : 'No Agreement'}
                 </span>
@@ -519,7 +517,7 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({ result, parsed, onReset }
           </div>
 
           {outcome?.per_agent_utilities && (
-            <div className="flex items-center gap-3 bg-zinc-950/80 border border-zinc-800/80 p-3 rounded-xl text-xs font-mono">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-zinc-950/80 border border-zinc-800/80 p-3 rounded-xl text-xs font-mono max-w-full">
               {Object.entries(outcome.per_agent_utilities).map(([agent, util]: [string, any]) => (
                 <div key={agent} className="text-center px-2">
                   <p className="text-zinc-500 text-[10px] uppercase">{agent}</p>
@@ -689,7 +687,7 @@ export const ScenarioBuilder: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
       {screen === 'input' && (
         <InputScreen
           description={description}

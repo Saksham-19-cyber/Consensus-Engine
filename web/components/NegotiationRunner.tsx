@@ -194,11 +194,11 @@ export const NegotiationRunner: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="space-y-8 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
       {/* Config Bar */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-xl">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 sm:p-6 backdrop-blur-xl w-full max-w-full overflow-hidden">
         <div className="flex items-center space-x-2 mb-4">
-          <Sparkles className="w-5 h-5 text-emerald-400" />
+          <Sparkles className="w-5 h-5 text-emerald-400 shrink-0" />
           <h2 className="text-lg font-semibold text-zinc-100">Live Negotiation Orchestration</h2>
         </div>
 
@@ -270,14 +270,14 @@ export const NegotiationRunner: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-5 flex items-center justify-between">
+        <div className="mt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <p className="text-xs text-zinc-500">
             Triggers decentralized LLM stakeholder agents with private utility functions.
           </p>
           <button
             onClick={handleStartNegotiation}
             disabled={loading}
-            className="flex items-center space-x-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-zinc-950 font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50"
+            className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-zinc-950 font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50"
           >
             {loading ? (
               <>
@@ -296,27 +296,27 @@ export const NegotiationRunner: React.FC = () => {
 
       {/* Outcome Banner */}
       {outcome && (
-        <div className="rounded-2xl border border-emerald-800/60 bg-emerald-950/20 p-6 backdrop-blur-xl">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+        <div className="rounded-2xl border border-emerald-800/60 bg-emerald-950/20 p-4 sm:p-6 backdrop-blur-xl w-full max-w-full overflow-hidden">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-center space-x-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
-              <div>
-                <div className="flex items-center space-x-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-lg font-bold text-zinc-100">Unanimous Consensus Ratified</span>
                   <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-900/60 text-emerald-300 border border-emerald-700/50">
                     {outcome.rounds_taken} Rounds
                   </span>
                 </div>
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-zinc-400 break-words">
                   Every participant voluntarily verified that private utility satisfies $U_i \ge r_i$.
                 </p>
               </div>
             </div>
 
             {/* Utility Grid */}
-            <div className="flex items-center space-x-4 bg-zinc-950/80 border border-zinc-800/80 p-3 rounded-xl text-xs font-mono">
+            <div className="flex flex-wrap items-center gap-3 bg-zinc-950/80 border border-zinc-800/80 p-3 rounded-xl text-xs font-mono max-w-full">
               {outcome.per_agent_utilities &&
                 Object.entries(outcome.per_agent_utilities).map(([agent, util]: [string, any]) => (
                   <div key={agent} className="text-center px-2">

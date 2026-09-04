@@ -86,9 +86,9 @@ export const PrivacyProbeView: React.FC = () => {
   const activeAgent = leakageData.find((a) => a.agent === selectedAgent) || leakageData[0];
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="space-y-8 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
       {/* Header Banner */}
-      <div className="rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/90 to-zinc-950/90 p-6 sm:p-8 backdrop-blur-xl relative overflow-hidden">
+      <div className="rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/90 to-zinc-950/90 p-4 sm:p-8 backdrop-blur-xl relative overflow-hidden w-full max-w-full">
         <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -105,7 +105,7 @@ export const PrivacyProbeView: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center space-x-3 bg-zinc-900/80 border border-zinc-800 p-3 rounded-xl font-mono text-center">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-zinc-900/80 border border-zinc-800 p-3 rounded-xl font-mono text-center max-w-full">
             <div className="px-3 border-r border-zinc-800">
               <p className="text-xs text-zinc-400">Mean Cosine Leak</p>
               <p className="text-xl font-bold text-rose-400">0.8312</p>
@@ -123,9 +123,9 @@ export const PrivacyProbeView: React.FC = () => {
       </div>
 
       {/* Critical Scientific Takeaway */}
-      <div className="rounded-xl border border-rose-900/50 bg-rose-950/20 p-5 flex items-start space-x-4">
+      <div className="rounded-xl border border-rose-900/50 bg-rose-950/20 p-4 sm:p-5 flex items-start space-x-4 w-full max-w-full overflow-hidden">
         <AlertOctagon className="w-6 h-6 text-rose-400 shrink-0 mt-0.5" />
-        <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed space-y-1">
+        <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed space-y-1 min-w-0 flex-1 break-words">
           <p className="font-semibold text-rose-300">
             Research Insight: Architectural Isolation Does Not Equal Information Privacy
           </p>

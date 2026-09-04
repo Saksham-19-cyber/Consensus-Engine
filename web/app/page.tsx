@@ -24,14 +24,14 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-emerald-500/30 selection:text-emerald-300 font-sans antialiased">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-emerald-500/30 selection:text-emerald-300 font-sans antialiased w-full max-w-full overflow-x-hidden">
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         backendOnline={backendOnline}
       />
 
-      <main className="pb-16">
+      <main className="pb-16 w-full max-w-full overflow-x-hidden">
         {activeTab === 'runner' && <NegotiationRunner />}
         {activeTab === 'benchmarks' && <ResultsDashboard />}
         {activeTab === 'privacy' && <PrivacyProbeView />}

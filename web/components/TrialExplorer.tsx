@@ -236,7 +236,7 @@ export const TrialExplorer: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="space-y-8 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
       {/* Header Banner */}
       <div className="rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/90 to-zinc-950/90 p-6 sm:p-8 backdrop-blur-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -287,7 +287,7 @@ export const TrialExplorer: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center space-x-2 w-full sm:w-auto text-xs">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto text-xs">
           <Filter className="w-3.5 h-3.5 text-zinc-400" />
           <span className="text-zinc-400">Filter:</span>
           {['all', 'agreed', 'breach', 'bluff'].map((f) => (
@@ -320,7 +320,7 @@ export const TrialExplorer: React.FC = () => {
             >
               {/* Header row */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center space-x-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-sm font-bold text-zinc-100">{r.trial_id}</span>
                   <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-mono text-[10px]">
                     {r.scenario}
@@ -481,7 +481,7 @@ export const TrialExplorer: React.FC = () => {
               </div>
             </div>
 
-            <pre className="p-4 overflow-auto text-xs font-mono text-zinc-300 bg-zinc-950/80 leading-relaxed flex-1">
+            <pre className="p-4 overflow-auto max-w-full text-xs font-mono text-zinc-300 bg-zinc-950/80 leading-relaxed flex-1">
               {JSON.stringify(jsonModalRecord, null, 2)}
             </pre>
           </div>

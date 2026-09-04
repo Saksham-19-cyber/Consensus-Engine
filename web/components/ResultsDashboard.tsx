@@ -126,9 +126,9 @@ export const ResultsDashboard: React.FC = () => {
   const [metricTab, setMetricTab] = useState<'pareto' | 'nash'>('pareto');
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="space-y-8 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
       {/* Header Banner */}
-      <div className="rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/90 to-zinc-950/90 p-6 sm:p-8 backdrop-blur-xl relative overflow-hidden">
+      <div className="rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/90 to-zinc-950/90 p-4 sm:p-8 backdrop-blur-xl relative overflow-hidden w-full max-w-full">
         <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -144,7 +144,7 @@ export const ResultsDashboard: React.FC = () => {
               semi-oracles, and omniscient game-theoretic bounds with 95% bootstrap confidence intervals.
             </p>
           </div>
-          <div className="flex items-center space-x-3 bg-zinc-900/80 border border-zinc-800 p-3 rounded-xl">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-zinc-900/80 border border-zinc-800 p-3 rounded-xl max-w-full">
             <div className="text-center px-3 border-r border-zinc-800">
               <p className="text-xs text-zinc-400">Total Trials</p>
               <p className="text-xl font-bold font-mono text-zinc-100">120+</p>
@@ -162,9 +162,9 @@ export const ResultsDashboard: React.FC = () => {
       </div>
 
       {/* Critical Scientific Finding Callout */}
-      <div className="rounded-xl border border-amber-900/40 bg-amber-950/20 p-4 sm:p-5 flex items-start space-x-4">
+      <div className="rounded-xl border border-amber-900/40 bg-amber-950/20 p-4 sm:p-5 flex items-start space-x-4 w-full max-w-full overflow-hidden">
         <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-        <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
+        <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed min-w-0 flex-1 break-words">
           <span className="font-semibold text-amber-300">The Limits of Raw Efficiency in Symmetric Spaces: </span>
           Consensus Engine does not outperform simple arithmetic midpoint averaging on raw Pareto efficiency in continuous
           unconstrained spaces (<span className="font-mono text-amber-200">0.918 vs 0.908, p=0.281, n.s.</span>). The true value of
@@ -175,8 +175,8 @@ export const ResultsDashboard: React.FC = () => {
 
       {/* Section 1: Main Efficiency Bar Charts with Error Bars */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm">
-          <div className="flex items-center justify-between mb-6">
+        <div className="lg:col-span-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6 backdrop-blur-sm w-full max-w-full overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
             <div>
               <h2 className="text-lg font-semibold text-zinc-100 flex items-center space-x-2">
                 <Scale className="w-5 h-5 text-emerald-400" />

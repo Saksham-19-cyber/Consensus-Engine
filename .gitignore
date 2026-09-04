@@ -2,4 +2,7 @@
 dist/
 build/
 .chroma/
-
+__pycache__/
+*.pyc
+.next/
+node_modules/
