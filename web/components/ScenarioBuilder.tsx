@@ -32,6 +32,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import {
+  API_BASE,
   parseScenario,
   runNegotiation,
   ParseScenarioResponse,
@@ -646,7 +647,11 @@ export const ScenarioBuilder: React.FC = () => {
       setParsed(res);
       setScreen('confirm');
     } catch (e: any) {
-      setParseError(e.message || 'Failed to parse scenario. Check the backend is running.');
+      let msg = e.message || 'Failed to parse scenario.';
+      if (msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('Failed to reach')) {
+        msg = `Failed to reach backend at ${API_BASE}. If using Render free tier, the backend may be waking up from cold start (takes 30–60s) — please wait a moment and retry. Also verify NEXT_PUBLIC_API_URL is configured in your Vercel project.`;
+      }
+      setParseError(msg);
     } finally {
       setParsing(false);
     }
@@ -665,7 +670,11 @@ export const ScenarioBuilder: React.FC = () => {
       setResult(res);
       setScreen('results');
     } catch (e: any) {
-      setParseError(e.message || 'Negotiation failed.');
+      let msg = e.message || 'Negotiation failed.';
+      if (msg === 'Failed to fetch' || msg.includes('NetworkError')) {
+        msg = `Connection to ${API_BASE} lost during negotiation. If your backend is sleeping or spinning up, wait for it to wake and retry.`;
+      }
+      setParseError(msg);
       setScreen('confirm');
     } finally {
       setRunning(false);

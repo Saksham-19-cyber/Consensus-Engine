@@ -719,6 +719,8 @@ npm run dev
 
 ### 2. Streamlit Dashboard (`/frontend`)
 
+> **Note on Frontend Differences:** The Streamlit dashboard is the project's legacy/rapid-experimentation interface, dedicated strictly to running and inspecting the 4 fixed benchmark scenarios (`roommate`, `business_deal`, `trip_planning`, `strategic_negotiation`). The **Free-Form Scenario Builder** is implemented **exclusively in the Next.js application (`/web`)**.
+
 ```bash
 # Start backend orchestrator
 uvicorn src.api.main:app --port 8000 &
@@ -765,10 +767,22 @@ streamlit run frontend/app.py
    ```
 4. Deploy to receive your live `https://<your-project>.vercel.app` URL.
 
+#### ⚠️ Troubleshooting: "Failed to fetch" on Vercel
+
+If clicking "Parse Scenario" or running a negotiation returns `"Failed to fetch"`, the browser's JavaScript was unable to establish a network connection with the backend. This is almost always caused by one of three reasons:
+
+1. **`NEXT_PUBLIC_API_URL` was not present during build:** Next.js bakes `NEXT_PUBLIC_*` environment variables directly into client-side static bundles at **build time**. If the variable was unset when Vercel built the project, it falls back to `http://localhost:8000`. The browser on `https://<your-app>.vercel.app` then either attempts to reach your local machine or blocks the request as Mixed Content (HTTPS calling HTTP).
+   * **Fix:** In Vercel Project Settings → **Environment Variables**, ensure `NEXT_PUBLIC_API_URL` is set to your live backend (e.g. `https://your-backend.onrender.com` without trailing slash), then go to **Deployments** → **Redeploy** (checking **"Clear Build Cache"**).
+2. **Render free-tier service is sleeping (cold start):** Render's free tier spins down web services after 15 minutes of idle time. The initial wake-up request can take 30–60 seconds while the container boots. If the frontend requests a parse before the backend is warm, the connection may drop.
+   * **Fix:** Open `https://your-backend.onrender.com/docs` in a new browser tab to trigger the wake-up. Once Swagger UI loads, retry the parse in the web UI. Notice the navbar indicator in the Next.js UI: an amber dot ("Demo Mode") means the backend health check is failing or sleeping; a green pulsing dot ("API Online") confirms the backend is ready.
+3. **CORS and URL scheme:** The FastAPI backend is configured with Starlette `CORSMiddleware` (`allow_origins=["*"]`, `allow_credentials=True`), which dynamically mirrors incoming Vercel HTTPS origins. Ensure your `NEXT_PUBLIC_API_URL` uses `https://` (matching the Vercel frontend origin) and does not contain typos or trailing slashes.
+
 ---
 
 ## 🧪 Free-Form Scenario Builder (Exploratory Mode)
 
+> **Frontend Availability:** The Free-Form Scenario Builder is implemented **exclusively in the Next.js web application (`/web`)** under the **Scenario Builder** tab. It is not available in the legacy Streamlit dashboard (`frontend/app.py`), which remains dedicated to the 4 fixed benchmark scenarios.
+>
 > **Scope notice:** Free-form scenarios are **not** covered by the N=30 statistical benchmarks documented in this README. The Pareto efficiency ratios, agreement rates, and Wilcoxon test results in the benchmark tables apply exclusively to the four fixed scenarios (`business_deal`, `roommate`, `trip_planning`, `strategic_negotiation`). Results from free-form scenarios are illustrative and exploratory — they should not be cited as evidence of the engine's negotiation performance.
 
 Consensus Engine includes a free-form scenario input mode that allows you to describe a negotiation situation in plain English. The LLM parses your description into structured `StakeholderProfile` and `Issue` objects, which are then passed directly into the existing negotiation engine — no modifications to the core protocol are required.

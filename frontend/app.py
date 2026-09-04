@@ -99,11 +99,14 @@ with tab1:
             if api_key_input:
                 os.environ["GROQ_API_KEY"] = api_key_input
         st.markdown("### ⚙️ Configuration")
-        scenario = st.selectbox("Scenario", ["roommate", "business_deal", "trip_planning"])
+        scenario = st.selectbox("Scenario", ["roommate", "business_deal", "trip_planning", "strategic_negotiation"])
         n_agents = st.slider("Agents", 2, 5, 3 if scenario == "trip_planning" else 2)
         max_rounds = st.slider("Max Rounds", 3, 20, 10)
         seed = st.number_input("Random Seed", value=42, min_value=0)
         start_btn = st.button("🚀 Start Negotiation", type="primary", use_container_width=True)
+
+        st.divider()
+        st.caption("💡 **Looking for custom / free-form scenarios?** The natural-language **Scenario Builder** is available exclusively in the Next.js frontend (`/web`). This Streamlit dashboard is dedicated to the 4 fixed benchmark scenarios.")
 
     if start_btn:
         with st.spinner("Running negotiation..."):
