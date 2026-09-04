@@ -1,3 +1,14 @@
+---
+title: Consensus Engine API
+emoji: 🤝
+colorFrom: blue
+colorTo: purple
+sdk: gradio
+sdk_version: 4.44.0
+app_file: app.py
+pinned: false
+---
+
 <div align="center">
 
 <img src="assets/banner.jpg" alt="Consensus Engine — Multi-Agent Negotiation Under Private Information" width="100%"/>
