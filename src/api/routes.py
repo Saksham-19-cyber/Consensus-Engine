@@ -3,9 +3,18 @@ import asyncio
 import json
 import logging
 import uuid
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 
-from src.api.schemas import NegotiateRequest, EvalRequest, SessionResponse, EvalResponse
+from src.api.schemas import (
+    NegotiateRequest,
+    EvalRequest,
+    SessionResponse,
+    EvalResponse,
+    ParseScenarioRequest,
+    ParseScenarioResponse,
+    ParsedIssueOut,
+    ParsedStakeholderOut,
+)
 from src.protocol.graph import run_negotiation
 from src.models.negotiation import NegotiationMessage
 from src.eval.runner import run_batch_baselines, evaluate_outcome, aggregate_results
@@ -38,14 +47,28 @@ async def list_scenarios():
 @router.post("/negotiate", response_model=SessionResponse)
 async def start_negotiation(req: NegotiateRequest):
     session_id = str(uuid.uuid4())[:8]
-    kwargs = {}
-    if req.scenario == "trip_planning":
-        kwargs["n_agents"] = req.n_agents
 
-    scenario = get_scenario(req.scenario, **kwargs)
-    profiles, issues = scenario.generate(seed=req.seed)
+    # ── Free-form mode: decode pre-parsed token ──────────────────────────────
+    if req.parsed_scenario_token:
+        from scenarios.from_text import ParseReport
+        try:
+            profiles, issues = ParseReport.decode_token(req.parsed_scenario_token)
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid parsed_scenario_token: {e}",
+            )
+        scenario_name = "free_form"
+    else:
+        # ── Standard named-scenario mode ─────────────────────────────────────
+        kwargs = {}
+        if req.scenario == "trip_planning":
+            kwargs["n_agents"] = req.n_agents
+        scenario = get_scenario(req.scenario, **kwargs)
+        profiles, issues = scenario.generate(seed=req.seed)
+        scenario_name = req.scenario
 
-    await create_session(session_id, req.scenario, {
+    await create_session(session_id, scenario_name, {
         "n_agents": len(profiles),
         "max_rounds": req.max_rounds,
         "seed": req.seed,
@@ -83,7 +106,7 @@ async def start_negotiation(req: NegotiateRequest):
     try:
         store_negotiation_outcome(
             session_id=session_id,
-            scenario_name=req.scenario,
+            scenario_name=scenario_name,
             outcome=outcome.model_dump(),
             profiles=[p.model_dump() for p in profiles],
             issues=issues,
@@ -93,10 +116,70 @@ async def start_negotiation(req: NegotiateRequest):
 
     return SessionResponse(
         session_id=session_id,
-        scenario=req.scenario,
+        scenario=scenario_name,
         status=outcome.status.value,
         outcome=outcome.model_dump(),
         messages=[m.model_dump() for m in collected_messages],
+    )
+
+
+@router.post("/scenario/parse", response_model=ParseScenarioResponse)
+async def parse_scenario(req: ParseScenarioRequest):
+    """
+    Parse a free-text negotiation description into structured scenario objects.
+
+    IMPORTANT: This endpoint does NOT run a negotiation. It returns a
+    validation report (ParseScenarioResponse) that MUST be shown to the
+    user for confirmation before calling POST /api/negotiate.
+
+    Free-form scenarios are unvalidated / exploratory and are NOT covered
+    by the N=30 statistical benchmarks in the README.
+    """
+    from scenarios.from_text import generate_from_description
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(
+            None,
+            lambda: generate_from_description(req.description, seed=req.seed),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    profiles, issues_meta, report = result
+
+    # Build per-stakeholder output objects (with source provenance)
+    stakeholders_out = []
+    for profile in profiles:
+        source = report.stakeholder_sources.get(profile.name, "llm_inferred")
+        stakeholders_out.append(ParsedStakeholderOut(
+            name=profile.name,
+            role=profile.role,
+            persona=profile.persona,
+            source=source,
+            weights=profile.utility_function.weights,
+            ideal_values=profile.utility_function.ideal_values,
+            reservation_value=profile.reservation_value,
+        ))
+
+    issues_out = [
+        ParsedIssueOut(
+            name=i["name"],
+            min_value=i["range"][0],
+            max_value=i["range"][1],
+            description=i.get("description", ""),
+        )
+        for i in issues_meta
+    ]
+
+    return ParseScenarioResponse(
+        issues=issues_out,
+        stakeholders=stakeholders_out,
+        field_notes=report.field_notes,
+        warnings=report.warnings,
+        pareto_mode=report.pareto_mode,
+        issue_count=report.issue_count,
+        parsed_scenario_token=report.to_token(),
     )
 
 

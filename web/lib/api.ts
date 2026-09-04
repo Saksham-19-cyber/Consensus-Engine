@@ -7,6 +7,8 @@ export interface NegotiateRequest {
   seed?: number;
   protocol?: string;
   model_config?: string;
+  /** Free-form mode: token returned by POST /api/scenario/parse */
+  parsed_scenario_token?: string;
 }
 
 export interface SessionResponse {
@@ -73,9 +75,48 @@ export interface TrialRecord {
   messages?: Array<{ round: number; agent: string; content: string }>;
 }
 
+// ── Free-form scenario types ──────────────────────────────────────────────────
+
+export interface ParseScenarioRequest {
+  description: string;
+  seed?: number;
+}
+
+export interface ParsedIssue {
+  name: string;
+  min_value: number;
+  max_value: number;
+  description: string;
+}
+
+export interface ParsedStakeholder {
+  name: string;
+  role: string;
+  persona: string;
+  /** "user_specified" | "llm_inferred" */
+  source: string;
+  weights: Record<string, number>;
+  ideal_values: Record<string, number>;
+  reservation_value: number;
+}
+
+export interface ParseScenarioResponse {
+  issues: ParsedIssue[];
+  stakeholders: ParsedStakeholder[];
+  field_notes: string[];
+  warnings: string[];
+  /** "exhaustive" | "monte_carlo" */
+  pareto_mode: string;
+  issue_count: number;
+  /** Opaque token — pass as parsed_scenario_token to runNegotiation() */
+  parsed_scenario_token: string;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/docs`, { method: 'HEAD', mode: 'no-cors' });
+    await fetch(`${API_BASE}/docs`, { method: 'HEAD', mode: 'no-cors' });
     return true;
   } catch {
     return false;
@@ -90,6 +131,19 @@ export async function runNegotiation(req: NegotiateRequest): Promise<SessionResp
   });
   if (!res.ok) {
     throw new Error(`API error: ${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function parseScenario(req: ParseScenarioRequest): Promise<ParseScenarioResponse> {
+  const res = await fetch(`${API_BASE}/api/scenario/parse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `Parse error: ${res.status}`);
   }
   return res.json();
 }

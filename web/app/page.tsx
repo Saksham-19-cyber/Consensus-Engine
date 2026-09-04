@@ -6,6 +6,7 @@ import { NegotiationRunner } from '@/components/NegotiationRunner';
 import { ResultsDashboard } from '@/components/ResultsDashboard';
 import { PrivacyProbeView } from '@/components/PrivacyProbeView';
 import { TrialExplorer } from '@/components/TrialExplorer';
+import { ScenarioBuilder } from '@/components/ScenarioBuilder';
 import { checkBackendHealth } from '@/lib/api';
 
 export default function Home() {
@@ -35,6 +36,7 @@ export default function Home() {
         {activeTab === 'benchmarks' && <ResultsDashboard />}
         {activeTab === 'privacy' && <PrivacyProbeView />}
         {activeTab === 'logs' && <TrialExplorer />}
+        {activeTab === 'builder' && <ScenarioBuilder />}
       </main>
 
       {/* Footer */}

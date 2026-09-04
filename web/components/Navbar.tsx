@@ -1,6 +1,6 @@
 'use client';
 
-import { ShieldAlert, Play, BarChart3, Lock, FileText, CheckCircle2, XCircle } from 'lucide-react';
+import { ShieldAlert, Play, BarChart3, Lock, FileText, CheckCircle2, XCircle, FlaskConical } from 'lucide-react';
 
 interface NavbarProps {
   activeTab: string;
@@ -14,6 +14,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, backend
     { id: 'benchmarks', label: 'Benchmark Dashboard', icon: BarChart3 },
     { id: 'privacy', label: 'Privacy Probe', icon: Lock },
     { id: 'logs', label: 'Trial Explorer', icon: FileText },
+    { id: 'builder', label: 'Scenario Builder', icon: FlaskConical },
   ];
 
   return (
