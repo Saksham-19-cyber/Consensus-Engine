@@ -1,19 +1,15 @@
 import spaces
 import os
 import gradio as gr
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.middleware.cors import CORSMiddleware
-from src.api.main import app as fastapi_app
+from src.api.routes import router
 from src.persistence.database import init_db
 
 # ZeroGPU hook to satisfy Hugging Face startup check
 @spaces.GPU
 def gpu_health_check(text: str) -> str:
     return f"ZeroGPU active: {text}"
-
-# Health check route on FastAPI
-@fastapi_app.get("/api/health")
-def api_health():
-    return {"status": "ok", "service": "consensus-engine"}
 
 # Create Gradio UI for Hugging Face Space & ZeroGPU
 with gr.Blocks(title="Consensus Engine API") as demo:
@@ -35,24 +31,35 @@ with gr.Blocks(title="Consensus Engine API") as demo:
     btn = gr.Button("Verify ZeroGPU Engine")
     btn.click(fn=gpu_health_check, inputs=inp, outputs=out)
 
-# ASGI Routing Middleware: Intercepts /api/* and /docs to route directly to FastAPI
-class FastAPIRoutingMiddleware:
-    def __init__(self, app, fastapi_target):
-        self.app = app
-        self.fastapi_target = fastapi_target
+# 1. Add CORS middleware
+demo.app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    async def __call__(self, scope, receive, send):
-        if scope["type"] in ("http", "websocket"):
-            path = scope.get("path", "")
-            if path.startswith("/api") or path in ("/docs", "/openapi.json"):
-                return await self.fastapi_target(scope, receive, send)
-        return await self.app(scope, receive, send)
+# 2. Add Swagger UI at /docs
+@demo.app.get("/docs", include_in_schema=False)
+async def custom_swagger():
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title="Consensus Engine - Swagger UI"
+    )
 
-demo.app.add_middleware(FastAPIRoutingMiddleware, fastapi_target=fastapi_app)
+# 3. Add Health check at /api/health
+@demo.app.get("/api/health")
+def api_health():
+    return {"status": "ok", "service": "consensus-engine"}
+
+# 4. Include all Consensus Engine API routes
+demo.app.include_router(router, prefix="/api")
 
 @demo.app.on_event("startup")
 async def on_startup():
     await init_db()
 
 if __name__ == "__main__":
-    demo.queue().launch()
+    # Passing _app=demo.app preserves all registered FastAPI routes on Gradio's server
+    demo.launch(_app=demo.app)
