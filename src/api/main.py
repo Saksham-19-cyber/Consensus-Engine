@@ -38,6 +38,21 @@ app.add_middleware(
 app.include_router(router, prefix="/api")
 
 
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "service": "consensus-engine"}
+
+
+@app.get("/")
+def root():
+    return {
+        "status": "ok",
+        "service": "consensus-engine",
+        "docs": "/docs",
+        "health": "/api/health",
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("src.api.main:app", host="0.0.0.0", port=8000, reload=True)
