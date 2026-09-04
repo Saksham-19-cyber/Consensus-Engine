@@ -1,4 +1,5 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || 'https://iehfupee71348adkhf-consensus-engine-api.hf.space';
 
 export interface NegotiateRequest {
   scenario: string;
