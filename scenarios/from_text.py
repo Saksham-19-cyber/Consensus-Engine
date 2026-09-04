@@ -131,7 +131,17 @@ class ParseReport:
         return asdict(self)
 
     def to_token(self) -> str:
-        """Encode as a base64 JSON token for round-tripping through the API."""
+        """
+        Encode parsed scenario as a base64 JSON token for round-tripping through the API.
+
+        Data Transparency & Privacy:
+        ----------------------------
+        The token payload contains ONLY structured schema items:
+          - `issues_meta`: issue names and [min, max] ranges
+          - `profiles`: Pydantic-dumped StakeholderProfile objects (weights, ideal values, reservation values)
+        It does NOT contain raw user description text, internal reasoning prompts,
+        or scratchpad logs from the LLM parser.
+        """
         payload = {
             "issues_meta": self.issues,
             "profiles": self.profiles,
@@ -141,7 +151,24 @@ class ParseReport:
 
     @staticmethod
     def decode_token(token: str) -> tuple[list[StakeholderProfile], list[dict]]:
-        """Reconstruct (profiles, issues) from a round-trip token."""
+        """
+        Reconstruct (profiles, issues) from a round-trip token.
+
+        Security Note & Known Limitation:
+        ---------------------------------
+        This token is plain base64-encoded JSON with NO cryptographic signature
+        or HMAC verification. On decode, the server reconstructs StakeholderProfile
+        and issue objects via Pydantic model validation (ensuring schema correctness,
+        type safety, and weight normalization), but does NOT verify that the contents
+        were untampered by the client.
+
+        A malicious or curious client could alter utility weights, ideal values,
+        or reservation thresholds before resubmission to POST /api/negotiate,
+        biasing the simulated negotiation outcome. For this research/demo tool
+        with no user authentication layer, this is an accepted limitation.
+        If deploying in production or multi-tenant environments with untrusted
+        clients, wrap this token with HMAC signing (e.g., itsdangerous.URLSafeSerializer).
+        """
         raw = base64.b64decode(token.encode()).decode()
         payload = json.loads(raw)
         profiles = [StakeholderProfile(**p) for p in payload["profiles"]]

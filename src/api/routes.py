@@ -52,6 +52,9 @@ async def start_negotiation(req: NegotiateRequest):
     if req.parsed_scenario_token:
         from scenarios.from_text import ParseReport
         try:
+            # Security Note: Token is unsigned base64-encoded JSON; schema is verified
+            # via Pydantic model validation on decode. Semantic tampering (e.g. altered
+            # weights) is an accepted limitation for this auth-less research/demo tool.
             profiles, issues = ParseReport.decode_token(req.parsed_scenario_token)
         except Exception as e:
             raise HTTPException(
