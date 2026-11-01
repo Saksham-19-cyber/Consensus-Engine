@@ -1,22 +1,12 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index.py"
-    },
-    {
-      "source": "/docs",
-      "destination": "/api/index.py"
-    },
-    {
-      "source": "/openapi.json",
-      "destination": "/api/index.py"
-    }
+    { "source": "/(.*)", "destination": "/app.py" }
   ],
   "functions": {
-    "api/index.py": {
+    "app.py": {
       "includeFiles": "results/**",
+      "excludeFiles": "{web/**,tests/**,assets/**,node_modules/**,*.md}",
       "maxDuration": 300
     }
   }

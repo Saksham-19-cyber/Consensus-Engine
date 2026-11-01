@@ -3,9 +3,6 @@ name = "consensus-engine"
 version = "0.1.0"
 description = "Multi-agent negotiation under private information"
 requires-python = ">=3.11"
-
-[tool.poetry]
-package-mode = false
 dependencies = [
     "groq>=0.11.0",
     "langgraph>=0.2.0",
@@ -17,7 +14,6 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "aiosqlite>=0.20.0",
     "numpy>=1.26.0",
-    "streamlit>=1.38.0",
     "websockets>=13.0",
     "python-dotenv>=1.0.0",
     "tenacity>=9.0.0",

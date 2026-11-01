@@ -1,0 +1,10 @@
+# Exclude frontend, tests, docs, assets, and local data from Python serverless bundle
+web/
+tests/
+assets/
+node_modules/
+*.md
+.git/
+.env*
+data/
+!results/**
