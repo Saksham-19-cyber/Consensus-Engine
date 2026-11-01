@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BarChart,
   Bar,
@@ -8,15 +8,14 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
   CartesianGrid,
-  Legend,
   ErrorBar,
   AreaChart,
   Area,
+  Line,
 } from 'recharts';
-import { Award, AlertTriangle, ShieldCheck, Scale, Info, CheckCircle2 } from 'lucide-react';
+import { Award, AlertTriangle, ShieldCheck, Scale, Info } from 'lucide-react';
+import { getEvalReport } from '@/lib/api';
 
 interface BenchmarkMethod {
   name: string;
@@ -36,94 +35,202 @@ interface BenchmarkMethod {
   rounds: number;
 }
 
-const benchmarkData: BenchmarkMethod[] = [
+// Generated strictly from results/benchmark_business_deal.jsonl (N=30, seeds 42-71)
+const defaultBenchmarkData: BenchmarkMethod[] = [
   {
     name: 'consensus_engine',
     label: 'Consensus Engine (Ours)',
-    pareto: 0.918,
-    paretoLow: 0.892,
-    paretoHigh: 0.938,
-    paretoError: [0.026, 0.02],
-    nash: 0.364,
-    nashLow: 0.305,
-    nashHigh: 0.418,
-    nashError: [0.059, 0.054],
+    pareto: 0.9156,
+    paretoLow: 0.9022,
+    paretoHigh: 0.9274,
+    paretoError: [0.0134, 0.0118],
+    nash: 0.3990,
+    nashLow: 0.3807,
+    nashHigh: 0.4162,
+    nashError: [0.0183, 0.0172],
     agreement: 100.0,
-    wilcoxonPareto: 'Baseline',
-    wilcoxonNash: 'Baseline',
-    infoLevel: 'Private (Zero Central)',
-    rounds: 2.0,
+    wilcoxonPareto: '*(Engine)*',
+    wilcoxonNash: '*(Engine)*',
+    infoLevel: 'Private Utilities',
+    rounds: 1.0,
   },
   {
     name: 'public_midpoint',
     label: 'Public Range Midpoint',
-    pareto: 0.908,
-    paretoLow: 0.895,
-    paretoHigh: 0.92,
-    paretoError: [0.013, 0.012],
-    nash: 0.389,
-    nashLow: 0.374,
-    nashHigh: 0.402,
-    nashError: [0.015, 0.013],
+    pareto: 0.9082,
+    paretoLow: 0.8973,
+    paretoHigh: 0.9189,
+    paretoError: [0.0109, 0.0107],
+    nash: 0.3885,
+    nashLow: 0.3752,
+    nashHigh: 0.4011,
+    nashError: [0.0133, 0.0126],
     agreement: 100.0,
-    wilcoxonPareto: 'p = 0.281 (n.s.)',
-    wilcoxonNash: 'p = 0.312 (n.s.)',
+    wilcoxonPareto: 'p = 0.0017 (**)',
+    wilcoxonNash: 'p = 0.0015 (**)',
     infoLevel: 'Public Bounds Only',
     rounds: 0.0,
   },
   {
-    name: 'private_ideal_average',
+    name: 'naive_average',
     label: 'Private Ideal Average',
-    pareto: 0.953,
-    paretoLow: 0.943,
-    paretoHigh: 0.961,
-    paretoError: [0.01, 0.008],
-    nash: 0.453,
-    nashLow: 0.434,
-    nashHigh: 0.472,
-    nashError: [0.019, 0.019],
+    pareto: 0.9525,
+    paretoLow: 0.9427,
+    paretoHigh: 0.9616,
+    paretoError: [0.0098, 0.0091],
+    nash: 0.4532,
+    nashLow: 0.4357,
+    nashHigh: 0.4697,
+    nashError: [0.0175, 0.0165],
     agreement: 100.0,
-    wilcoxonPareto: 'p = 0.004 (**)',
-    wilcoxonNash: 'p = 0.002 (**)',
-    infoLevel: 'Semi-Oracle',
+    wilcoxonPareto: 'p < 1e-6 (**)',
+    wilcoxonNash: 'p < 1e-6 (**)',
+    infoLevel: 'Semi-Oracle (Private Ideals)',
     rounds: 0.0,
   },
   {
     name: 'nash_bargaining',
     label: 'Nash Bargaining Solution',
-    pareto: 0.998,
-    paretoLow: 0.996,
-    paretoHigh: 0.999,
-    paretoError: [0.002, 0.001],
-    nash: 0.528,
-    nashLow: 0.503,
-    nashHigh: 0.554,
-    nashError: [0.025, 0.026],
+    pareto: 0.9991,
+    paretoLow: 0.9984,
+    paretoHigh: 0.9996,
+    paretoError: [0.0007, 0.0005],
+    nash: 0.5481,
+    nashLow: 0.5370,
+    nashHigh: 0.5583,
+    nashError: [0.0111, 0.0102],
     agreement: 100.0,
-    wilcoxonPareto: 'p < 10⁻⁵ (**)',
-    wilcoxonNash: 'p < 10⁻⁶ (**)',
-    infoLevel: 'Full Omniscient Oracle',
+    wilcoxonPareto: 'p < 1e-6 (**)',
+    wilcoxonNash: 'p < 1e-6 (**)',
+    infoLevel: 'Full Cooperative Oracle',
+    rounds: 0.0,
+  },
+  {
+    name: 'random_uniform',
+    label: 'Random Uniform',
+    pareto: 0.8205,
+    paretoLow: 0.7960,
+    paretoHigh: 0.8441,
+    paretoError: [0.0245, 0.0236],
+    nash: 0.2887,
+    nashLow: 0.2624,
+    nashHigh: 0.3150,
+    nashError: [0.0263, 0.0263],
+    agreement: 96.7,
+    wilcoxonPareto: 'p < 1e-6 (**)',
+    wilcoxonNash: 'p < 1e-6 (**)',
+    infoLevel: 'Random Guess',
     rounds: 0.0,
   },
 ];
 
+// Reservation data from results/reservation_sweep.jsonl and deterministic baselines
 const reservationData = [
-  { threshold: 'r ≤ 0.40', rVal: 0.4, midpointBreach: 0.0, ceBreach: 0.0, midpointAgree: 100.0, ceAgree: 100.0 },
-  { threshold: 'r = 0.55', rVal: 0.55, midpointBreach: 4.0, ceBreach: 0.0, midpointAgree: 96.0, ceAgree: 100.0 },
-  { threshold: 'r = 0.60', rVal: 0.6, midpointBreach: 33.0, ceBreach: 0.0, midpointAgree: 67.0, ceAgree: 40.0 },
-  { threshold: 'r = 0.65', rVal: 0.65, midpointBreach: 78.0, ceBreach: 0.0, midpointAgree: 22.0, ceAgree: 20.0 },
-  { threshold: 'r = 0.70', rVal: 0.7, midpointBreach: 100.0, ceBreach: 0.0, midpointAgree: 0.0, ceAgree: 0.0 },
+  { threshold: 'r = 0.40', rVal: 0.40, midpointBreach: 0.0, ceBreach: 0.0, midpointAgree: 100.0, ceAgree: 100.0, ceNote: '2/2 trials' },
+  { threshold: 'r = 0.55', rVal: 0.55, midpointBreach: 4.0, ceBreach: 0.0, midpointAgree: 96.0, ceAgree: null, ceNote: 'Not yet run' },
+  { threshold: 'r = 0.60', rVal: 0.60, midpointBreach: 33.0, ceBreach: 0.0, midpointAgree: 67.0, ceAgree: null, ceNote: 'Not yet run' },
+  { threshold: 'r = 0.65', rVal: 0.65, midpointBreach: 78.0, ceBreach: 0.0, midpointAgree: 22.0, ceAgree: null, ceNote: 'Not yet run' },
+  { threshold: 'r = 0.70', rVal: 0.70, midpointBreach: 100.0, ceBreach: 0.0, midpointAgree: 0.0, ceAgree: null, ceNote: 'Not yet run' },
 ];
 
+// Deterministic baseline arithmetic, no LLM
 const anchorData = [
-  { level: '+10%', stated: 9.0, naiveShift: 3.0, naiveCapture: 3.3, ceShift: 0.0, ceCapture: 0.0, flagged: 0 },
-  { level: '+25%', stated: 22.5, naiveShift: 7.5, naiveCapture: 8.3, ceShift: -0.42, ceCapture: -0.5, flagged: 100 },
-  { level: '+50%', stated: 45.0, naiveShift: 15.0, naiveCapture: 16.7, ceShift: 0.35, ceCapture: 0.4, flagged: 100 },
-  { level: '+75%', stated: 67.5, naiveShift: 22.5, naiveCapture: 25.0, ceShift: 0.82, ceCapture: 0.9, flagged: 100 },
+  { level: '+10%', stated: 9.0, naiveShift: 3.0, naiveCapture: 3.3, midShift: 0.0 },
+  { level: '+25%', stated: 22.5, naiveShift: 7.5, naiveCapture: 8.3, midShift: 0.0 },
+  { level: '+50%', stated: 45.0, naiveShift: 15.0, naiveCapture: 16.7, midShift: 0.0 },
+  { level: '+75%', stated: 67.5, naiveShift: 22.5, naiveCapture: 25.0, midShift: 0.0 },
 ];
 
 export const ResultsDashboard: React.FC = () => {
   const [metricTab, setMetricTab] = useState<'pareto' | 'nash'>('pareto');
+  const [data, setData] = useState<BenchmarkMethod[]>(defaultBenchmarkData);
+
+  useEffect(() => {
+    async function fetchReport() {
+      try {
+        const report = await getEvalReport('business_deal');
+        if (report && report.summary && Object.keys(report.summary).length > 0) {
+          const s = report.summary;
+          const methods = Object.keys(s);
+          const mapped: BenchmarkMethod[] = methods.map((m) => {
+            const row = s[m];
+            const pMean = row.mean_pareto_ratio;
+            const pCI = row.ci95_pareto_ratio || [pMean, pMean];
+            const nMean = row.mean_nash_welfare;
+            const nCI = row.ci95_nash_welfare || [nMean, nMean];
+
+            const pErr: [number, number] = [
+              Math.max(0, pMean - pCI[0]),
+              Math.max(0, pCI[1] - pMean),
+            ];
+            const nErr: [number, number] = [
+              Math.max(0, nMean - nCI[0]),
+              Math.max(0, nCI[1] - nMean),
+            ];
+
+            const wilcoxonP = row.wilcoxon_pareto_vs_engine;
+            let wPStr = '*(Engine)*';
+            if (m !== 'consensus_engine' && wilcoxonP && wilcoxonP.p_value != null) {
+              const pVal = wilcoxonP.p_value;
+              const sig = pVal < 0.01 ? '**' : pVal < 0.05 ? '*' : 'n.s.';
+              wPStr = pVal < 1e-6 ? `p < 1e-6 (${sig})` : `p = ${pVal.toFixed(4)} (${sig})`;
+            }
+
+            const wilcoxonN = row.wilcoxon_nash_vs_engine;
+            let wNStr = '*(Engine)*';
+            if (m !== 'consensus_engine' && wilcoxonN && wilcoxonN.p_value != null) {
+              const pVal = wilcoxonN.p_value;
+              const sig = pVal < 0.01 ? '**' : pVal < 0.05 ? '*' : 'n.s.';
+              wNStr = pVal < 1e-6 ? `p < 1e-6 (${sig})` : `p = ${pVal.toFixed(4)} (${sig})`;
+            }
+
+            return {
+              name: m,
+              label:
+                m === 'consensus_engine'
+                  ? 'Consensus Engine (Ours)'
+                  : m === 'public_midpoint'
+                  ? 'Public Range Midpoint'
+                  : m === 'naive_average'
+                  ? 'Private Ideal Average'
+                  : m === 'nash_bargaining'
+                  ? 'Nash Bargaining Solution'
+                  : m,
+              pareto: pMean,
+              paretoLow: pCI[0],
+              paretoHigh: pCI[1],
+              paretoError: pErr,
+              nash: nMean,
+              nashLow: nCI[0],
+              nashHigh: nCI[1],
+              nashError: nErr,
+              agreement: (row.agreement_rate || 1.0) * 100,
+              wilcoxonPareto: wPStr,
+              wilcoxonNash: wNStr,
+              infoLevel:
+                m === 'consensus_engine'
+                  ? 'Private Utilities'
+                  : m === 'public_midpoint'
+                  ? 'Public Bounds'
+                  : m === 'naive_average'
+                  ? 'Semi-Oracle'
+                  : m === 'nash_bargaining'
+                  ? 'Full Oracle'
+                  : 'Public',
+              rounds: row.mean_rounds || 0,
+            };
+          });
+
+          // Ensure consensus_engine is first
+          mapped.sort((a, b) => (a.name === 'consensus_engine' ? -1 : b.name === 'consensus_engine' ? 1 : 0));
+          setData(mapped);
+        }
+      } catch (e) {
+        console.warn('Using tracked log benchmarks (backend report fetch failed):', e);
+      }
+    }
+    fetchReport();
+  }, []);
 
   return (
     <div className="space-y-8 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
@@ -134,20 +241,20 @@ export const ResultsDashboard: React.FC = () => {
           <div>
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-800/40 text-emerald-400 text-xs font-mono mb-3">
               <Award className="w-3.5 h-3.5" />
-              <span>Rigorous Scientific Evaluation (N=30 per cell)</span>
+              <span>Scientific Evaluation (N=30 Stage a, Seeds 42–71)</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-zinc-100 tracking-tight">
               Empirical Benchmark & Efficiency Frontiers
             </h1>
             <p className="text-sm text-zinc-400 mt-1 max-w-2xl">
               Evaluating multi-agent negotiation with private information against zero-knowledge arithmetic heuristics,
-              semi-oracles, and omniscient game-theoretic bounds with 95% bootstrap confidence intervals.
+              semi-oracles, and game-theoretic bounds with 95% bootstrap confidence intervals.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-zinc-900/80 border border-zinc-800 p-3 rounded-xl max-w-full">
             <div className="text-center px-3 border-r border-zinc-800">
               <p className="text-xs text-zinc-400">Total Trials</p>
-              <p className="text-xl font-bold font-mono text-zinc-100">120+</p>
+              <p className="text-xl font-bold font-mono text-zinc-100">180</p>
             </div>
             <div className="text-center px-3 border-r border-zinc-800">
               <p className="text-xs text-zinc-400">Bootstrap B</p>
@@ -161,15 +268,16 @@ export const ResultsDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Critical Scientific Finding Callout */}
+      {/* Honest Scientific Finding Callout */}
       <div className="rounded-xl border border-amber-900/40 bg-amber-950/20 p-4 sm:p-5 flex items-start space-x-4 w-full max-w-full overflow-hidden">
         <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
         <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed min-w-0 flex-1 break-words">
-          <span className="font-semibold text-amber-300">The Limits of Raw Efficiency in Symmetric Spaces: </span>
-          Consensus Engine does not outperform simple arithmetic midpoint averaging on raw Pareto efficiency in continuous
-          unconstrained spaces (<span className="font-mono text-amber-200">0.918 vs 0.908, p=0.281, n.s.</span>). The true value of
-          multi-agent dialogue emerges strictly in non-trivial regimes: preventing contract breaches under strict reservation thresholds
-          and neutralizing bad-faith strategic anchor manipulation.
+          <span className="font-semibold text-amber-300">What This Benchmark Measures: </span>
+          All 30 Consensus Engine trials concluded in round 1 with exactly 4 LLM calls (1 mediator proposal + 3 critiques),
+          meaning every party accepted the mediator&apos;s initial proposal. The engine achieves a utilitarian welfare ratio of
+          <span className="font-mono text-amber-200"> 0.9156 vs. 0.9082</span> for public midpoint (Wilcoxon{' '}
+          <span className="font-mono text-amber-200">p = 0.0017**</span>; Nash welfare <span className="font-mono text-amber-200">p = 0.0015**</span>).
+          This reflects the mediator adjusting the midpoint using issue descriptions, NOT iterative back-and-forth negotiation.
         </div>
       </div>
 
@@ -182,7 +290,7 @@ export const ResultsDashboard: React.FC = () => {
                 <Scale className="w-5 h-5 text-emerald-400" />
                 <span>Efficiency Metric Comparison with 95% Bootstrap CI</span>
               </h2>
-              <p className="text-xs text-zinc-400 mt-0.5">Error bars display empirical 95% confidence intervals from 1,000 resamples</p>
+              <p className="text-xs text-zinc-400 mt-0.5">Error bars display empirical 95% confidence intervals from 1,000 bootstrap resamples</p>
             </div>
             <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs">
               <button
@@ -191,7 +299,7 @@ export const ResultsDashboard: React.FC = () => {
                   metricTab === 'pareto' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                Pareto Ratio
+                Utilitarian Ratio
               </button>
               <button
                 onClick={() => setMetricTab('nash')}
@@ -207,7 +315,7 @@ export const ResultsDashboard: React.FC = () => {
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={benchmarkData}
+                data={data}
                 margin={{ top: 20, right: 30, left: 0, bottom: 25 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
@@ -223,7 +331,7 @@ export const ResultsDashboard: React.FC = () => {
                 <YAxis
                   stroke="#71717a"
                   fontSize={11}
-                  domain={metricTab === 'pareto' ? [0.8, 1.02] : [0.2, 0.6]}
+                  domain={metricTab === 'pareto' ? [0.75, 1.02] : [0.2, 0.6]}
                   tickLine={false}
                 />
                 <Tooltip
@@ -237,14 +345,14 @@ export const ResultsDashboard: React.FC = () => {
                           {metricTab === 'pareto' ? (
                             <>
                               <p className="text-emerald-400 font-mono font-semibold">
-                                Pareto Ratio: {d.pareto.toFixed(3)} [{d.paretoLow.toFixed(3)}, {d.paretoHigh.toFixed(3)}]
+                                Utilitarian Ratio: {d.pareto.toFixed(4)} [{d.paretoLow.toFixed(4)}, {d.paretoHigh.toFixed(4)}]
                               </p>
                               <p className="text-zinc-400">Wilcoxon vs Engine: <span className="font-mono text-amber-300">{d.wilcoxonPareto}</span></p>
                             </>
                           ) : (
                             <>
                               <p className="text-teal-400 font-mono font-semibold">
-                                Nash Welfare: {d.nash.toFixed(3)} [{d.nashLow.toFixed(3)}, {d.nashHigh.toFixed(3)}]
+                                Nash Welfare: {d.nash.toFixed(4)} [{d.nashLow.toFixed(4)}, {d.nashHigh.toFixed(4)}]
                               </p>
                               <p className="text-zinc-400">Wilcoxon vs Engine: <span className="font-mono text-amber-300">{d.wilcoxonNash}</span></p>
                             </>
@@ -279,14 +387,14 @@ export const ResultsDashboard: React.FC = () => {
           <div>
             <h3 className="text-sm font-semibold text-zinc-200 flex items-center space-x-2">
               <Info className="w-4 h-4 text-emerald-400" />
-              <span>Two-Sided Wilcoxon Inference</span>
+              <span>Two-Sided Wilcoxon Tests (N=30)</span>
             </h3>
             <p className="text-xs text-zinc-400 mt-1">
-              Hypothesis test evaluating whether baseline methods significantly differ from Consensus Engine.
+              Paired Wilcoxon signed-rank test comparing each baseline with Consensus Engine.
             </p>
 
             <div className="mt-4 space-y-3">
-              {benchmarkData.map((b) => (
+              {data.map((b) => (
                 <div key={b.name} className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 text-xs">
                   <div className="flex justify-between items-center mb-1">
                     <span className="font-medium text-zinc-200">{b.label}</span>
@@ -295,7 +403,7 @@ export const ResultsDashboard: React.FC = () => {
                     </span>
                   </div>
                   <div className="flex justify-between text-zinc-400 text-[11px] font-mono">
-                    <span>Pareto:</span>
+                    <span>Welfare:</span>
                     <span className={b.wilcoxonPareto.includes('**') ? 'text-amber-400 font-semibold' : 'text-zinc-300'}>
                       {b.wilcoxonPareto}
                     </span>
@@ -312,12 +420,12 @@ export const ResultsDashboard: React.FC = () => {
           </div>
 
           <div className="mt-4 pt-3 border-t border-zinc-800/80 text-[11px] text-zinc-500">
-            ** Significant at p &lt; 0.01; * Significant at p &lt; 0.05; n.s. indicates statistical tie.
+            ** p &lt; 0.01; * p &lt; 0.05; n.s. indicates statistical tie.
           </div>
         </div>
       </div>
 
-      {/* Section 2: Why Negotiation Matters (Reservation Impasse & Anchor Manipulation) */}
+      {/* Section 2: Reservation Impasse & Anchor Manipulation */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Chart A: Reservation Threshold Breach Rate */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm">
@@ -325,14 +433,14 @@ export const ResultsDashboard: React.FC = () => {
             <div>
               <div className="flex items-center space-x-2">
                 <ShieldCheck className="w-5 h-5 text-rose-400" />
-                <h3 className="text-base font-semibold text-zinc-100">Contract Breach Under Reservation Thresholds</h3>
+                <h3 className="text-base font-semibold text-zinc-100">Reservation Value Breach Rate</h3>
               </div>
               <p className="text-xs text-zinc-400 mt-1">
-                Midpoint averaging produces 100% contract breach when r ≥ 0.70; Consensus Engine maintains 0% breach.
+                Midpoint averaging produces 100% contract breach when r ≥ 0.70; CE breach is 0.0% by construction.
               </p>
             </div>
-            <span className="text-[10px] font-mono bg-rose-950 text-rose-400 border border-rose-800/40 px-2 py-0.5 rounded-full">
-              N=100 Trials
+            <span className="text-[10px] font-mono bg-zinc-800 text-zinc-400 border border-zinc-700 px-2 py-0.5 rounded-full">
+              Deterministic Baselines N=100
             </span>
           </div>
 
@@ -350,8 +458,8 @@ export const ResultsDashboard: React.FC = () => {
                         <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl shadow-xl text-xs space-y-1">
                           <p className="font-bold text-zinc-200">{d.threshold}</p>
                           <p className="text-rose-400 font-mono">Midpoint Breach Rate: {d.midpointBreach}%</p>
-                          <p className="text-emerald-400 font-mono">Consensus Engine Breach: 0.0% (Guaranteed)</p>
-                          <p className="text-zinc-400">CE Voluntary Agreement: {d.ceAgree}% (Rem. Safe Impasse)</p>
+                          <p className="text-emerald-400 font-mono">CE Involuntary Breach: 0.0% (Enforced by code)</p>
+                          <p className="text-zinc-400 font-mono">CE Agreement: {d.ceAgree !== null ? `${d.ceAgree}% (${d.ceNote})` : d.ceNote}</p>
                         </div>
                       );
                     }
@@ -364,8 +472,8 @@ export const ResultsDashboard: React.FC = () => {
             </ResponsiveContainer>
           </div>
           <div className="mt-2 text-[11px] text-zinc-400 flex justify-between">
-            <span>Mean agent min utility under midpoint: <strong className="text-zinc-200 font-mono">0.6168</strong></span>
-            <span className="text-emerald-400 font-medium">Consensus Engine Breach: 0.0% across all rows</span>
+            <span>Involuntary breach is strictly 0.0% by construction (`would_accept`)</span>
+            <span className="text-emerald-400 font-medium">r=0.40 tested; r≥0.55 unrun</span>
           </div>
         </div>
 
@@ -374,15 +482,15 @@ export const ResultsDashboard: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <div className="flex items-center space-x-2">
-                <AlertTriangle className="w-5 h-5 text-cyan-400" />
-                <h3 className="text-base font-semibold text-zinc-100">Strategic Anchor Manipulation Resistance</h3>
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-semibold text-zinc-100">Strategic Anchor Baseline Arithmetic</h3>
               </div>
               <p className="text-xs text-zinc-400 mt-1">
-                Naive average concedes 25.0% contract span; Consensus Engine holds bluffer capture beneath 0.9%.
+                Naive average concedes up to 25.0% contract span under anchor inflation; midpoint resists price shift.
               </p>
             </div>
-            <span className="text-[10px] font-mono bg-cyan-950 text-cyan-400 border border-cyan-800/40 px-2 py-0.5 rounded-full">
-              N=30 per tier
+            <span className="text-[10px] font-mono bg-zinc-800 text-zinc-400 border border-zinc-700 px-2 py-0.5 rounded-full">
+              Deterministic Arithmetic (No LLM)
             </span>
           </div>
 
@@ -400,23 +508,21 @@ export const ResultsDashboard: React.FC = () => {
                         <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl shadow-xl text-xs space-y-1">
                           <p className="font-bold text-zinc-200">Inflation: {d.level} (+${d.stated.toFixed(2)})</p>
                           <p className="text-amber-400 font-mono">Naive Span Captured: +{d.naiveCapture}% (+${d.naiveShift.toFixed(2)})</p>
-                          <p className="text-emerald-400 font-mono">CE Span Captured: {d.ceCapture > 0 ? `+${d.ceCapture}%` : `${d.ceCapture}%`} (${d.ceShift.toFixed(2)})</p>
-                          <p className="text-cyan-400 font-mono">Bluff Flag Sensitivity: {d.flagged}%</p>
+                          <p className="text-zinc-400 font-mono">Midpoint Span Shift: +${d.midShift.toFixed(2)} (0.0% capture)</p>
+                          <p className="text-zinc-500 text-[10px]">CE anchor ablation: Not yet run</p>
                         </div>
                       );
                     }
                     return null;
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                 <Bar dataKey="naiveCapture" fill="#f59e0b" name="Naive Average Capture %" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="ceCapture" fill="#10b981" name="Consensus Engine Capture %" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-2 text-[11px] text-zinc-400 flex justify-between">
-            <span>Bluff detector triggered at <strong className="text-zinc-200 font-mono">100.0% sensitivity</strong> for inflation ≥ 25%</span>
-            <span className="text-cyan-400 font-medium">Mediator throttles concessions</span>
+            <span>Naive averaging coordinate shifts linearly with stated demand</span>
+            <span className="text-zinc-400 font-medium">CE anchor sweep not yet run</span>
           </div>
         </div>
       </div>

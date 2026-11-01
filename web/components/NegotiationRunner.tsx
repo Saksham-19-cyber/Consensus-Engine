@@ -9,12 +9,9 @@ import {
   RefreshCw,
   Scale,
   Sparkles,
-  UserCheck,
-  Building2,
-  Truck,
-  Users,
+  Info,
 } from 'lucide-react';
-import { runNegotiation, NegotiateRequest, SessionResponse } from '@/lib/api';
+import { runNegotiation } from '@/lib/api';
 
 interface RoundEvent {
   round: number;
@@ -30,114 +27,23 @@ interface RoundEvent {
   }>;
 }
 
-const mockInitialRun: RoundEvent[] = [
-  {
-    round: 1,
-    proposal: {
-      unit_price: 55.0,
-      order_volume: 2500,
-      delivery_days: 14.0,
-      payment_terms: 45.0,
-      quality_tier: 2.0,
-    },
-    mediatorReasoning: 'Initial package proposed near public midpoint of all issue ranges.',
-    critiques: [
-      {
-        agent: 'SupplierCo',
-        satisfaction: 6.2,
-        acceptable: false,
-        concession: 0.25,
-        reasoning: 'Price acceptable, but delivery time of 14 days and payment terms of 45 days place cash-flow stress on our factory.',
-        bluffFlag: false,
-      },
-      {
-        agent: 'BuyerInc',
-        satisfaction: 4.5,
-        acceptable: false,
-        concession: 0.2,
-        reasoning: 'Order volume of 2500 is higher than quarterly target of 2000; payment terms should be 60 days.',
-        bluffFlag: false,
-      },
-      {
-        agent: 'LogiTrans',
-        satisfaction: 7.5,
-        acceptable: true,
-        concession: 0.6,
-        reasoning: 'Volume and delivery schedule fit carrier load profile comfortably.',
-        bluffFlag: false,
-      },
-    ],
-  },
-  {
-    round: 2,
-    proposal: {
-      unit_price: 54.8,
-      order_volume: 2150,
-      delivery_days: 13.5,
-      payment_terms: 42.0,
-      quality_tier: 2.0,
-    },
-    mediatorReasoning:
-      'Issue-linkage trade proposed: volume conceded downward toward BuyerInc in exchange for payment terms shortened toward SupplierCo.',
-    critiques: [
-      {
-        agent: 'SupplierCo',
-        satisfaction: 7.8,
-        acceptable: true,
-        concession: 0.35,
-        reasoning: 'Shorter 42-day payment terms compensate for modest volume reduction. Acceptable.',
-        bluffFlag: false,
-      },
-      {
-        agent: 'BuyerInc',
-        satisfaction: 7.2,
-        acceptable: true,
-        concession: 0.3,
-        reasoning: 'Volume of 2150 is within acceptable tolerance. Unit price of $54.80 is favorable. Acceptable.',
-        bluffFlag: false,
-      },
-      {
-        agent: 'LogiTrans',
-        satisfaction: 7.6,
-        acceptable: true,
-        concession: 0.5,
-        reasoning: 'Route remains profitable and operationally viable. Acceptable.',
-        bluffFlag: false,
-      },
-    ],
-  },
-];
-
 export const NegotiationRunner: React.FC = () => {
   const [scenario, setScenario] = useState<string>('business_deal');
   const [protocol, setProtocol] = useState<string>('single_text');
-  const [modelConfig, setModelConfig] = useState<string>('openai/gpt-oss-120b');
+  const [modelConfig, setModelConfig] = useState<string>('20b_vs_20b');
   const [seed, setSeed] = useState<number>(42);
   const [maxRounds, setMaxRounds] = useState<number>(3);
   const [loading, setLoading] = useState<boolean>(false);
-  const [rounds, setRounds] = useState<RoundEvent[]>(mockInitialRun);
-  const [outcome, setOutcome] = useState<any>({
-    status: 'agreed',
-    agreement_reached: true,
-    rounds_taken: 2,
-    final_proposal: {
-      unit_price: 54.8,
-      order_volume: 2150,
-      delivery_days: 13.5,
-      payment_terms: 42.0,
-      quality_tier: 2.0,
-    },
-    per_agent_utilities: {
-      SupplierCo: 0.732,
-      BuyerInc: 0.674,
-      LogiTrans: 0.605,
-    },
-    pareto_ratio: 0.918,
-    nash_welfare: 0.364,
-  });
+  const [error, setError] = useState<string | null>(null);
+  const [rounds, setRounds] = useState<RoundEvent[]>([]);
+  const [outcome, setOutcome] = useState<any>(null);
 
   const handleStartNegotiation = async () => {
     setLoading(true);
+    setError(null);
+    setOutcome(null);
+    setRounds([]);
+
     try {
       const res = await runNegotiation({
         scenario,
@@ -148,11 +54,7 @@ export const NegotiationRunner: React.FC = () => {
       });
 
       if (res.outcome) {
-        setOutcome({
-          ...res.outcome,
-          pareto_ratio: 0.918,
-          nash_welfare: 0.364,
-        });
+        setOutcome(res.outcome);
       }
 
       // Reconstruct round progression from messages if present
@@ -183,11 +85,8 @@ export const NegotiationRunner: React.FC = () => {
         });
         setRounds(Array.from(roundMap.values()));
       }
-    } catch (e) {
-      console.warn('Backend unavailable, simulating execution trace:', e);
-      // Simulate live run progress
-      await new Promise((r) => setTimeout(r, 1200));
-      setRounds(mockInitialRun);
+    } catch (e: any) {
+      setError(e?.message || 'Negotiation failed. Ensure backend is running with GROQ_API_KEY configured.');
     } finally {
       setLoading(false);
     }
@@ -227,21 +126,21 @@ export const NegotiationRunner: React.FC = () => {
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none focus:border-emerald-500"
             >
               <option value="single_text">single_text (Mediated DAG)</option>
-              <option value="alternating_offers">alternating_offers (Direct Bilateral)</option>
+              <option value="alternating_offers">alternating_offers (Direct Turn-Taking)</option>
             </select>
           </div>
 
           {/* Model Config */}
           <div>
-            <label className="block text-zinc-400 font-medium mb-1.5">Model Engine</label>
+            <label className="block text-zinc-400 font-medium mb-1.5">Model Config</label>
             <select
               value={modelConfig}
               onChange={(e) => setModelConfig(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none focus:border-emerald-500"
             >
-              <option value="openai/gpt-oss-120b">openai/gpt-oss-120b (Production)</option>
-              <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
-              <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Fast)</option>
+              <option value="20b_vs_20b">20b_vs_20b (Default Benchmark Preset)</option>
+              <option value="120b_vs_20b">120b_vs_20b (Asymmetric Intelligence)</option>
+              <option value="120b_vs_120b">120b_vs_120b (Maximum Intelligence)</option>
             </select>
           </div>
 
@@ -262,8 +161,8 @@ export const NegotiationRunner: React.FC = () => {
             <input
               type="number"
               value={maxRounds}
-              min={2}
-              max={10}
+              min={1}
+              max={15}
               onChange={(e) => setMaxRounds(Number(e.target.value))}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none focus:border-emerald-500 font-mono"
             />
@@ -272,7 +171,7 @@ export const NegotiationRunner: React.FC = () => {
 
         <div className="mt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <p className="text-xs text-zinc-500">
-            Triggers decentralized LLM stakeholder agents with private utility functions.
+            Executes decentralized LLM stakeholder agents with private utility functions via LangGraph.
           </p>
           <button
             onClick={handleStartNegotiation}
@@ -294,23 +193,54 @@ export const NegotiationRunner: React.FC = () => {
         </div>
       </div>
 
+      {/* Error state */}
+      {error && (
+        <div className="rounded-xl border border-rose-900/60 bg-rose-950/20 p-4 text-xs text-rose-300 flex items-start space-x-3">
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-rose-200">Execution Error</p>
+            <p className="mt-0.5">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state when no negotiation has been run yet */}
+      {!outcome && rounds.length === 0 && !loading && !error && (
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-12 text-center">
+          <Info className="w-8 h-8 text-zinc-500 mx-auto mb-3" />
+          <h3 className="text-base font-semibold text-zinc-200">Ready to Negotiate</h3>
+          <p className="text-xs text-zinc-400 mt-1 max-w-md mx-auto">
+            Select a scenario and configuration above, then click &ldquo;Start Negotiation&rdquo; to execute
+            a live multi-agent session.
+          </p>
+        </div>
+      )}
+
       {/* Outcome Banner */}
       {outcome && (
         <div className="rounded-2xl border border-emerald-800/60 bg-emerald-950/20 p-4 sm:p-6 backdrop-blur-xl w-full max-w-full overflow-hidden">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="flex items-center space-x-3 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
-                <CheckCircle2 className="w-6 h-6" />
+                {outcome.agreement_reached ? (
+                  <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                ) : (
+                  <XCircle className="w-6 h-6 text-amber-400" />
+                )}
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-lg font-bold text-zinc-100">Unanimous Consensus Ratified</span>
+                  <span className="text-lg font-bold text-zinc-100">
+                    {outcome.agreement_reached ? 'Unanimous Consensus Ratified' : 'Impasse Declared (No Agreement)'}
+                  </span>
                   <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-900/60 text-emerald-300 border border-emerald-700/50">
                     {outcome.rounds_taken} Rounds
                   </span>
                 </div>
                 <p className="text-xs text-zinc-400 break-words">
-                  Every participant voluntarily verified that private utility satisfies $U_i \ge r_i$.
+                  {outcome.agreement_reached
+                    ? 'Every participant voluntarily verified that private utility satisfies U_i ≥ r_i.'
+                    : 'Parties exited cleanly to prevent an involuntary reservation breach.'}
                 </p>
               </div>
             </div>
@@ -321,20 +251,24 @@ export const NegotiationRunner: React.FC = () => {
                 Object.entries(outcome.per_agent_utilities).map(([agent, util]: [string, any]) => (
                   <div key={agent} className="text-center px-2">
                     <p className="text-zinc-500 text-[10px] uppercase">{agent}</p>
-                    <p className="text-sm font-bold text-emerald-400">{util.toFixed(3)}</p>
+                    <p className="text-sm font-bold text-emerald-400">
+                      {typeof util === 'number' ? util.toFixed(3) : util}
+                    </p>
                   </div>
                 ))}
-              <div className="border-l border-zinc-800 pl-3 text-center">
-                <p className="text-zinc-500 text-[10px] uppercase">Pareto Ratio</p>
-                <p className="text-sm font-bold text-teal-300">0.918</p>
-              </div>
+              {outcome.pareto?.efficiency_ratio != null && (
+                <div className="border-l border-zinc-800 pl-3 text-center">
+                  <p className="text-zinc-500 text-[10px] uppercase">Welfare Ratio</p>
+                  <p className="text-sm font-bold text-teal-300">{Number(outcome.pareto.efficiency_ratio).toFixed(3)}</p>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Final Ratified Package */}
           {outcome.final_proposal && (
             <div className="mt-4 pt-4 border-t border-emerald-900/40">
-              <p className="text-xs font-semibold text-zinc-300 mb-2">Ratified Settlement Values:</p>
+              <p className="text-xs font-semibold text-zinc-300 mb-2">Final Proposal Values:</p>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(outcome.final_proposal).map(([issue, val]: [string, any]) => (
                   <span
@@ -351,105 +285,107 @@ export const NegotiationRunner: React.FC = () => {
       )}
 
       {/* Round-by-Round Progression */}
-      <div className="space-y-6">
-        <h3 className="text-base font-semibold text-zinc-200 flex items-center space-x-2">
-          <Scale className="w-5 h-5 text-zinc-400" />
-          <span>Round-by-Round Execution Trace</span>
-        </h3>
+      {rounds.length > 0 && (
+        <div className="space-y-6">
+          <h3 className="text-base font-semibold text-zinc-200 flex items-center space-x-2">
+            <Scale className="w-5 h-5 text-zinc-400" />
+            <span>Round-by-Round Execution Trace</span>
+          </h3>
 
-        {rounds.map((r) => (
-          <div
-            key={r.round}
-            className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-6 space-y-4 backdrop-blur-sm"
-          >
-            {/* Round Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800/60">
-              <div className="flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-zinc-800 text-zinc-300 font-mono text-xs flex items-center justify-center font-bold">
-                  {r.round}
-                </span>
-                <span className="font-semibold text-sm text-zinc-100">Round {r.round} Mediation Loop</span>
-              </div>
-              <span className="text-xs text-zinc-400 font-mono">
-                {r.round === rounds.length ? 'Final Ratification Round' : 'Proposal Revision'}
-              </span>
-            </div>
-
-            {/* Proposal on Table */}
-            <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-4">
-              <p className="text-xs font-medium text-zinc-400 mb-2">Proposal on Table from Mediator:</p>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {Object.entries(r.proposal).map(([k, v]) => (
-                  <span
-                    key={k}
-                    className="text-xs font-mono px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-emerald-400"
-                  >
-                    {k}: <span className="text-zinc-100 font-bold">{v}</span>
+          {rounds.map((r) => (
+            <div
+              key={r.round}
+              className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-6 space-y-4 backdrop-blur-sm"
+            >
+              {/* Round Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-800/60">
+                <div className="flex items-center space-x-2">
+                  <span className="w-6 h-6 rounded-full bg-zinc-800 text-zinc-300 font-mono text-xs flex items-center justify-center font-bold">
+                    {r.round}
                   </span>
+                  <span className="font-semibold text-sm text-zinc-100">Round {r.round} Mediation Loop</span>
+                </div>
+                <span className="text-xs text-zinc-400 font-mono">
+                  {r.round === rounds.length ? 'Final Round' : 'Proposal Revision'}
+                </span>
+              </div>
+
+              {/* Proposal on Table */}
+              <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-4">
+                <p className="text-xs font-medium text-zinc-400 mb-2">Proposal on Table from Mediator:</p>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {Object.entries(r.proposal).map(([k, v]) => (
+                    <span
+                      key={k}
+                      className="text-xs font-mono px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-emerald-400"
+                    >
+                      {k}: <span className="text-zinc-100 font-bold">{typeof v === 'number' ? v.toFixed(1) : v}</span>
+                    </span>
+                  ))}
+                </div>
+                {r.mediatorReasoning && (
+                  <p className="text-xs text-zinc-400 italic mt-2 border-l-2 border-emerald-500/50 pl-3">
+                    &ldquo;{r.mediatorReasoning}&rdquo;
+                  </p>
+                )}
+              </div>
+
+              {/* Stakeholder Critiques */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {r.critiques.map((c) => (
+                  <div
+                    key={c.agent}
+                    className={`rounded-xl border p-4 text-xs space-y-2 ${
+                      c.acceptable
+                        ? 'border-emerald-900/50 bg-emerald-950/10'
+                        : 'border-zinc-800 bg-zinc-950/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-zinc-200">{c.agent}</span>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                          c.acceptable
+                            ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/40'
+                            : 'bg-rose-950/60 text-rose-300 border border-rose-800/40'
+                        }`}
+                      >
+                        {c.acceptable ? 'Accept' : 'Critique'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-zinc-400">
+                        <span>Satisfaction:</span>
+                        <span className="font-mono text-zinc-200">
+                          {typeof c.satisfaction === 'number' ? `${c.satisfaction.toFixed(1)}/10` : c.satisfaction}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-zinc-400">
+                        <span>Concession W.:</span>
+                        <span className="font-mono text-zinc-200">
+                          {typeof c.concession === 'number' ? `${(c.concession * 100).toFixed(0)}%` : c.concession}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-zinc-400 text-[11px] leading-relaxed pt-1 line-clamp-3">
+                      &ldquo;{c.reasoning}&rdquo;
+                    </p>
+
+                    {c.bluffFlag && (
+                      <div className="pt-2 border-t border-rose-900/50 flex items-center space-x-1.5 text-rose-400 text-[10px]">
+                        <AlertTriangle className="w-3 h-3" />
+                        <span>Bluffing behavior flagged by mediator</span>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
-              {r.mediatorReasoning && (
-                <p className="text-xs text-zinc-400 italic mt-2 border-l-2 border-emerald-500/50 pl-3">
-                  &ldquo;{r.mediatorReasoning}&rdquo;
-                </p>
-              )}
             </div>
-
-            {/* Stakeholder Critiques */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {r.critiques.map((c) => (
-                <div
-                  key={c.agent}
-                  className={`rounded-xl border p-4 text-xs space-y-2 ${
-                    c.acceptable
-                      ? 'border-emerald-900/50 bg-emerald-950/10'
-                      : 'border-zinc-800 bg-zinc-950/60'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-zinc-200">{c.agent}</span>
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                        c.acceptable
-                          ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/40'
-                          : 'bg-rose-950/60 text-rose-300 border border-rose-800/40'
-                      }`}
-                    >
-                      {c.acceptable ? 'Accept' : 'Critique'}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-zinc-400">
-                      <span>Satisfaction:</span>
-                      <span className="font-mono text-zinc-200">
-                        {typeof c.satisfaction === 'number' ? `${c.satisfaction.toFixed(1)}/10` : c.satisfaction}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-zinc-400">
-                      <span>Concession W.:</span>
-                      <span className="font-mono text-zinc-200">
-                        {typeof c.concession === 'number' ? `${(c.concession * 100).toFixed(0)}%` : c.concession}
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="text-zinc-400 text-[11px] leading-relaxed pt-1 line-clamp-3">
-                    &ldquo;{c.reasoning}&rdquo;
-                  </p>
-
-                  {c.bluffFlag && (
-                    <div className="pt-2 border-t border-rose-900/50 flex items-center space-x-1.5 text-rose-400 text-[10px]">
-                      <AlertTriangle className="w-3 h-3" />
-                      <span>Bluffing behavior flagged by mediator</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
