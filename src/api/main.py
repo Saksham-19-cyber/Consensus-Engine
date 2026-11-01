@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import re
 import logging
 from contextlib import asynccontextmanager
 
@@ -46,19 +47,32 @@ else:
         "http://127.0.0.1:3000",
     ]
 
+VERCEL_ORIGIN_REGEX = r"^https:\/\/.*\.vercel\.app$"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=VERCEL_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+def _is_allowed_origin(origin: str) -> bool:
+    if not origin:
+        return True
+    if origin in allowed_origins or "*" in allowed_origins:
+        return True
+    if re.match(VERCEL_ORIGIN_REGEX, origin):
+        return True
+    return False
+
+
 def _cors_headers(request: Request) -> dict[str, str]:
     origin = request.headers.get("origin")
     if origin:
-        if origin in allowed_origins or "*" in allowed_origins:
+        if _is_allowed_origin(origin):
             return {
                 "Access-Control-Allow-Origin": origin,
                 "Access-Control-Allow-Credentials": "true",
