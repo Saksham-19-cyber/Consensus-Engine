@@ -1,7 +1,7 @@
 """
 Vercel Serverless Function entrypoint for Consensus Engine FastAPI backend.
-Exports the ASGI app object for @vercel/python.
+Exports the ASGI app object from app.py in the repository root for @vercel/python.
 """
-from src.api.main import app
+from app import app
 
 __all__ = ["app"]

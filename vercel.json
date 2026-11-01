@@ -1,10 +1,10 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/(.*)", "destination": "/app.py" }
+    { "source": "/(.*)", "destination": "/api/index.py" }
   ],
   "functions": {
-    "app.py": {
+    "api/index.py": {
       "includeFiles": "results/**",
       "excludeFiles": "{web/**,tests/**,assets/**,node_modules/**,*.md}",
       "maxDuration": 300
