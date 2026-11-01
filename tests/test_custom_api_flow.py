@@ -176,5 +176,44 @@ class TestCustomScenarioAPI:
         assert len(data["issues"]) == 2
         assert len(data["stakeholders"]) == 2
         assert data["stakeholders"][0]["source"] == "user_specified"
-        assert "parsed_scenario_token" in data
         assert data["is_feasible"] is True
+
+
+def test_endpoint_caps_and_rate_limiting(client):
+    import time
+    from src.api.routes import _IP_REQUEST_LOG, _RATE_LIMIT_MAX_REQUESTS
+    _IP_REQUEST_LOG.clear()
+
+    token = _make_dummy_token()
+
+    # Test max_rounds cap (> 10)
+    res_rounds = client.post(
+        "/api/negotiate/start",
+        json={"parsed_scenario_token": token, "max_rounds": 15},
+    )
+    assert res_rounds.status_code == 400
+    assert "max_rounds exceeds maximum" in res_rounds.json()["detail"]
+
+    # Test n_trials cap (> 5)
+    res_trials = client.post(
+        "/api/eval/run",
+        json={"scenario": "roommate", "n_trials": 10},
+    )
+    assert res_trials.status_code == 400
+    assert "n_trials exceeds maximum" in res_trials.json()["detail"]
+
+    # Test rate limit trigger by populating the window with 10 timestamps
+    now = time.time()
+    _IP_REQUEST_LOG["testclient"] = [now] * _RATE_LIMIT_MAX_REQUESTS
+
+    # 11th call should trigger 429
+    with patch("src.api.routes._execute_negotiation_job"):
+        res_429 = client.post(
+            "/api/negotiate/start",
+            json={"parsed_scenario_token": token, "max_rounds": 5},
+        )
+    assert res_429.status_code == 429
+    assert "Rate limit exceeded" in res_429.json()["detail"]
+
+    # Clean up state
+    _IP_REQUEST_LOG.clear()

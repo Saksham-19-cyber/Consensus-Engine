@@ -1,9 +1,11 @@
 from __future__ import annotations
 import asyncio
+from collections import defaultdict
 import json
 import logging
+import time
 import uuid
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Request
 
 from src.api.schemas import (
     NegotiateRequest,
@@ -36,6 +38,28 @@ router = APIRouter()
 
 # Background job registry
 _JOBS: dict[str, dict] = {}
+
+# Per-IP rate limiting state for LLM endpoints (10 requests per minute)
+_IP_REQUEST_LOG: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_WINDOW = 60.0  # seconds
+_RATE_LIMIT_MAX_REQUESTS = 10  # max requests per window per IP
+MAX_ALLOWED_ROUNDS = 10
+MAX_ALLOWED_TRIALS = 5
+
+
+def check_rate_limit(request: Request):
+    """Enforce simple per-IP sliding-window rate limit for LLM endpoints."""
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    cutoff = now - _RATE_LIMIT_WINDOW
+    timestamps = [t for t in _IP_REQUEST_LOG[client_ip] if t > cutoff]
+    if len(timestamps) >= _RATE_LIMIT_MAX_REQUESTS:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded: maximum {_RATE_LIMIT_MAX_REQUESTS} requests per minute. Please wait before retrying.",
+        )
+    timestamps.append(now)
+    _IP_REQUEST_LOG[client_ip] = timestamps
 
 
 @router.get("/scenarios")
@@ -128,8 +152,15 @@ async def _execute_negotiation_job(
 async def start_negotiation(
     req: NegotiateRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     sync: bool = False,
 ):
+    check_rate_limit(request)
+    if req.max_rounds > MAX_ALLOWED_ROUNDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"max_rounds exceeds maximum allowed limit of {MAX_ALLOWED_ROUNDS}",
+        )
     job_id = str(uuid.uuid4())[:8]
     is_custom = False
 
@@ -237,10 +268,11 @@ async def get_negotiation_job_status(job_id: str):
 
 
 @router.post("/scenario/parse", response_model=ParseScenarioResponse)
-async def parse_scenario(req: ParseScenarioRequest):
+async def parse_scenario(req: ParseScenarioRequest, request: Request):
     """
     Parse a free-text negotiation description into structured scenario objects.
     """
+    check_rate_limit(request)
     from scenarios.from_text import generate_from_description
 
     loop = asyncio.get_event_loop()
@@ -362,7 +394,13 @@ async def get_session_detail(session_id: str):
 
 
 @router.post("/eval/run", response_model=EvalResponse)
-async def run_evaluation(req: EvalRequest):
+async def run_evaluation(req: EvalRequest, request: Request):
+    check_rate_limit(request)
+    if req.n_trials > MAX_ALLOWED_TRIALS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"n_trials exceeds maximum allowed limit of {MAX_ALLOWED_TRIALS}",
+        )
     batch_id = str(uuid.uuid4())[:8]
 
     kwargs = {}
