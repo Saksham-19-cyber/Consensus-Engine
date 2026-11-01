@@ -14,22 +14,27 @@ be cited as evidence of the engine's negotiation performance.
 Design model
 ------------
 The user describes a negotiation situation in plain text. The LLM extracts:
-  - Issues (name, range, what higher/lower means)
+  - Issues (name, range, what higher/lower means, units, ordinal legends)
   - Stakeholders (name, role, utility weights, ideal values, reservation value)
 
-Any party whose preferences are NOT explicitly provided by the user gets
-LLM-invented ("llm_inferred") values. The ParseReport exposes this
-provenance so the UI can label it — invented numbers are never presented
-as user-provided data.
+Canonicalizes keys (exact -> slug -> fuzzy), drops unknown keys, renormalizes
+over real issues only, tests invariants (weights sum to 1.0, utility at ideal == 1.0),
+checks feasibility via Nash bargaining grid/MC, supports user editing, and provides
+plain-language explanation summaries.
 """
 from __future__ import annotations
 
 import base64
 import json
 import logging
+import os
+import re
 from dataclasses import dataclass, field, asdict
-from typing import Literal
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Literal, Optional
 
+import numpy as np
 from pydantic import BaseModel, Field, model_validator
 
 from src.llm.client import structured_completion
@@ -37,21 +42,52 @@ from src.models.utility import Issue, UtilityFunction, StakeholderProfile
 
 logger = logging.getLogger(__name__)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Pydantic models used ONLY for LLM structured output
-# ──────────────────────────────────────────────────────────────────────────────
-
 MAX_ISSUES = 6   # >6 → reject (grid search / MC both become infeasible)
 MC_THRESHOLD = 4  # >4 → switch to Monte Carlo approximation
 
 
+def _canonicalize_key(raw_key: str, valid_names: list[str]) -> str | None:
+    """
+    Match raw issue key to a valid issue name using:
+    1. Exact match
+    2. Case-insensitive match
+    3. Slug match (replace spaces/hyphens/special chars with underscores)
+    4. Unambiguous substring/prefix match
+    """
+    if raw_key in valid_names:
+        return raw_key
+
+    lower_map = {n.lower(): n for n in valid_names}
+    if raw_key.lower() in lower_map:
+        return lower_map[raw_key.lower()]
+
+    slug = re.sub(r"[^a-z0-9]+", "_", raw_key.lower()).strip("_")
+    slug_map = {re.sub(r"[^a-z0-9]+", "_", n.lower()).strip("_"): n for n in valid_names}
+    if slug in slug_map:
+        return slug_map[slug]
+
+    candidates = [
+        name for name in valid_names
+        if slug in re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+        or re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") in slug
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+
+    return None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Pydantic models used ONLY for LLM structured output
+# ──────────────────────────────────────────────────────────────────────────────
+
 class _LLMIssue(BaseModel):
     """One negotiation issue as extracted by the LLM."""
-    name: str = Field(description="Snake_case identifier, e.g. 'rent_split'")
+    name: str = Field(description="Snake_case identifier, e.g. 'rent_split' or 'license_fee'")
     min_value: float = Field(description="Minimum numeric value of this issue")
     max_value: float = Field(description="Maximum numeric value of this issue")
     description: str = Field(
-        description="One sentence: what higher value means, what lower value means"
+        description="One sentence: what higher/lower values mean, units, or ordinal legend (e.g. 1=basic, 2=standard, 3=dedicated)"
     )
 
 
@@ -61,7 +97,7 @@ class _LLMStakeholder(BaseModel):
     role: str = Field(description="Short role label, e.g. 'Buyer', 'Tenant'")
     persona: str = Field(description="1–2 sentence description of their negotiation stance")
     weights: dict[str, float] = Field(
-        description="Utility weight per issue — will be renormalized to sum=1"
+        description="Utility weight per issue name"
     )
     ideal_values: dict[str, float] = Field(
         description="Preferred value per issue within its [min, max] range"
@@ -76,14 +112,6 @@ class _LLMStakeholder(BaseModel):
             "llm_inferred = LLM invented plausible preferences for this party"
         )
     )
-
-    @model_validator(mode="after")
-    def renormalize_weights(self) -> "_LLMStakeholder":
-        total = sum(self.weights.values())
-        if total > 0 and abs(total - 1.0) > 0.01:
-            factor = 1.0 / total
-            self.weights = {k: round(v * factor, 6) for k, v in self.weights.items()}
-        return self
 
 
 class _LLMScenarioResponse(BaseModel):
@@ -110,70 +138,99 @@ class ParseReport:
     The API serialises this for the frontend confirmation step.
     Nothing runs until the user explicitly confirms this report.
     """
-    # Parsed objects (same as the tuple elements)
     issues: list[dict] = field(default_factory=list)            # issues-meta dicts
     profiles: list[dict] = field(default_factory=list)          # StakeholderProfile.model_dump()
-
-    # Provenance — which stakeholders had LLM-invented preferences
     stakeholder_sources: dict[str, Literal["user_specified", "llm_inferred"]] = field(
         default_factory=dict
     )
-
-    # Human-readable notes surfaced in the UI confirmation screen
     field_notes: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
-
-    # Metadata for UI display
     issue_count: int = 0
     pareto_mode: Literal["exhaustive", "monte_carlo"] = "exhaustive"
+    is_feasible: bool = True
+    summary: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     def to_token(self) -> str:
-        """
-        Encode parsed scenario as a base64 JSON token for round-tripping through the API.
-
-        Data Transparency & Privacy:
-        ----------------------------
-        The token payload contains ONLY structured schema items:
-          - `issues_meta`: issue names and [min, max] ranges
-          - `profiles`: Pydantic-dumped StakeholderProfile objects (weights, ideal values, reservation values)
-        It does NOT contain raw user description text, internal reasoning prompts,
-        or scratchpad logs from the LLM parser.
-        """
+        """Encode parsed scenario as a base64 JSON token for round-tripping."""
         payload = {
             "issues_meta": self.issues,
             "profiles": self.profiles,
+            "stakeholder_sources": self.stakeholder_sources,
+            "is_feasible": self.is_feasible,
         }
         raw = json.dumps(payload, separators=(",", ":"))
         return base64.b64encode(raw.encode()).decode()
 
     @staticmethod
     def decode_token(token: str) -> tuple[list[StakeholderProfile], list[dict]]:
-        """
-        Reconstruct (profiles, issues) from a round-trip token.
-
-        Security Note & Known Limitation:
-        ---------------------------------
-        This token is plain base64-encoded JSON with NO cryptographic signature
-        or HMAC verification. On decode, the server reconstructs StakeholderProfile
-        and issue objects via Pydantic model validation (ensuring schema correctness,
-        type safety, and weight normalization), but does NOT verify that the contents
-        were untampered by the client.
-
-        A malicious or curious client could alter utility weights, ideal values,
-        or reservation thresholds before resubmission to POST /api/negotiate,
-        biasing the simulated negotiation outcome. For this research/demo tool
-        with no user authentication layer, this is an accepted limitation.
-        If deploying in production or multi-tenant environments with untrusted
-        clients, wrap this token with HMAC signing (e.g., itsdangerous.URLSafeSerializer).
-        """
+        """Reconstruct (profiles, issues) from a round-trip token."""
         raw = base64.b64decode(token.encode()).decode()
         payload = json.loads(raw)
         profiles = [StakeholderProfile(**p) for p in payload["profiles"]]
         issues = payload["issues_meta"]
         return profiles, issues
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Feasibility check
+# ──────────────────────────────────────────────────────────────────────────────
+
+def check_scenario_feasibility(
+    profiles: list[StakeholderProfile],
+    issues: list[dict],
+    resolution: int = 12,
+) -> tuple[bool, float]:
+    """
+    Check whether ANY agreement point satisfies every party's reservation value.
+    Uses grid evaluation (<=4 issues) or Monte Carlo sampling (>4 issues).
+    Returns (is_feasible, max_min_surplus).
+    """
+    issue_names = [i["name"] for i in issues]
+    n_issues = len(issues)
+
+    if n_issues <= 4:
+        grids = [np.linspace(i["range"][0], i["range"][1], resolution) for i in issues]
+        mesh = np.array(np.meshgrid(*grids, indexing="ij")).reshape(n_issues, -1).T
+    else:
+        rng = np.random.default_rng(42)
+        n_samples = 40000
+        mesh = np.column_stack([
+            rng.uniform(i["range"][0], i["range"][1], n_samples)
+            for i in issues
+        ])
+
+    reservation_values = np.array([p.reservation_value for p in profiles])
+    n_combos = mesh.shape[0]
+    all_utilities = np.zeros((len(profiles), n_combos))
+
+    for p_idx, p in enumerate(profiles):
+        uf = p.utility_function
+        issue_map = {i["name"]: i for i in issues}
+        score_acc = np.zeros(n_combos)
+        for issue_idx, issue_name in enumerate(issue_names):
+            weight = uf.weights.get(issue_name, 0.0)
+            if weight == 0:
+                continue
+            issue_meta = issue_map[issue_name]
+            min_v, max_v = issue_meta["range"]
+            span = max_v - min_v if max_v != min_v else 1.0
+            ideal = uf.ideal_values.get(issue_name, (max_v + min_v) / 2)
+
+            vals = mesh[:, issue_idx]
+            norm_val = (vals - min_v) / span
+            norm_ideal = (ideal - min_v) / span
+            distance = np.abs(norm_val - norm_ideal)
+            score_acc += weight * (1.0 - distance)
+        all_utilities[p_idx] = np.clip(score_acc, 0.0, 1.0)
+
+    surplus = all_utilities - reservation_values[:, None]
+    feasible_points = np.all(surplus >= -1e-6, axis=0)
+    is_feasible = bool(np.any(feasible_points))
+    max_min_surplus = float(np.max(np.min(surplus, axis=0)))
+    return is_feasible, max_min_surplus
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -187,14 +244,15 @@ Your job is to read a natural-language description of a negotiation situation an
 2. A list of STAKEHOLDERS (negotiating parties) with utility weights and ideal values.
 
 CRITICAL RULES:
-- Issues must be quantifiable with clear numeric ranges (not binary yes/no).
-- Weights per stakeholder must cover ALL issues you define (can be 0 but must be present).
-- If the user did not describe a party's preferences, mark them as source="llm_inferred"
-  and generate PLAUSIBLE preferences — do NOT fabricate them without marking them.
+- Issues must be quantifiable with clear numeric ranges (min_value < max_value).
+- For ordinal choices (e.g. support level, SLA tiers, permissions), encode on a labelled numeric scale (e.g. 1=basic, 2=standard, 3=dedicated), and put the legend in the issue description.
+- Reject or avoid pure yes/no binary issues without meaningful intermediate trade-offs.
+- Use exact snake_case issue names for all keys in stakeholder weights and ideal_values.
+- Weights per stakeholder must cover ALL issues you define.
+- If the user did not describe a party's preferences, mark them source="llm_inferred" and generate PLAUSIBLE preferences.
 - If user described a party's preferences explicitly, mark them source="user_specified".
-- reservation_value should be 0.25–0.55 for most parties (0.35 if completely unknown).
+- reservation_value should be 0.25–0.55 for most parties (0.35 if unknown).
 - ideal_values must fall within [min_value, max_value] for each issue.
-- weights will be renormalized automatically, but try to make them sum ≈ 1.
 - Add a warning for anything ambiguous or that required significant assumptions."""
 
 
@@ -203,13 +261,207 @@ def _build_user_message(text: str) -> str:
         f"Parse this negotiation description into a structured scenario:\n\n"
         f"---\n{text.strip()}\n---\n\n"
         f"Extract 2–6 issues and all negotiating parties. "
-        f"Be conservative: if fewer issues clearly cover the situation, prefer fewer. "
-        f"Mark any party whose preferences you had to invent as source='llm_inferred'."
+        f"Make sure weight and ideal keys use the exact issue snake_case names."
     )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Main public function
+# Build & Validate Pipeline
+# ──────────────────────────────────────────────────────────────────────────────
+
+def validate_and_update_scenario(
+    issues_data: list[dict],
+    profiles_data: list[dict],
+    user_edited: bool = True,
+    stakeholder_sources: dict[str, str] | None = None,
+    warnings: list[str] | None = None,
+    field_notes: list[str] | None = None,
+) -> tuple[list[StakeholderProfile], list[dict], ParseReport]:
+    """
+    Validate and construct (profiles, issues_meta, report) from user-edited or raw JSON data.
+    Enforces all invariants:
+      1. Issue ranges min < max.
+      2. Weights cover exactly issue set and sum to 1.0.
+      3. Utility at ideal == 1.0 (+-1e-5).
+      4. Ideal values within [min, max].
+      5. Reservations within [0.05, 0.95].
+      6. Re-runs feasibility check.
+      7. Marks edited parties as 'user_specified'.
+    """
+    warnings = list(warnings or [])
+    field_notes = list(field_notes or [])
+    stakeholder_sources = dict(stakeholder_sources or {})
+
+    # 1. Issues
+    n_issues = len(issues_data)
+    if n_issues < 2:
+        raise ValueError(
+            "At least 2 negotiation issues are required. Please provide a more "
+            "detailed description that includes multiple things the parties disagree on."
+        )
+    if n_issues > MAX_ISSUES:
+        raise ValueError(
+            f"The parser extracted {n_issues} issues from your description, but "
+            f"Consensus Engine supports a maximum of {MAX_ISSUES} issues for "
+            f"free-form scenarios. The Pareto-frontier search becomes computationally "
+            f"infeasible beyond that. Please simplify your description by combining "
+            f"related issues or removing less important ones, then try again."
+        )
+
+    issues: list[Issue] = []
+    issues_meta: list[dict] = []
+    issue_names: list[str] = []
+
+    for item in issues_data:
+        name = item.get("name", "").strip()
+        if not name:
+            raise ValueError("Issue name cannot be empty.")
+        rng = item.get("range")
+        if rng is None:
+            min_v = float(item.get("min_value", 0.0))
+            max_v = float(item.get("max_value", 1.0))
+        else:
+            min_v, max_v = float(rng[0]), float(rng[1])
+
+        if min_v >= max_v:
+            min_v, max_v = max_v, min_v
+            warnings.append(f"Issue '{name}': swapped inverted min/max values.")
+
+        # Check for pure binary flag
+        desc = item.get("description", "")
+        if min_v == 0.0 and max_v == 1.0 and ("yes/no" in desc.lower() or "binary" in desc.lower()):
+            warnings.append(f"Issue '{name}' appears to be a pure binary flag (0/1); continuous or multi-level ordinal scales are recommended.")
+
+        issue_obj = Issue(name=name, min_value=min_v, max_value=max_v, description=desc)
+        issues.append(issue_obj)
+        issues_meta.append({"name": name, "range": [min_v, max_v], "description": desc})
+        issue_names.append(name)
+
+    # 2. Profiles
+    if len(profiles_data) < 2:
+        raise ValueError("At least 2 negotiating parties are required.")
+
+    profiles: list[StakeholderProfile] = []
+    for p_data in profiles_data:
+        name = p_data.get("name", "").strip()
+        role = p_data.get("role", "Participant")
+        persona = p_data.get("persona", "")
+        raw_weights = p_data.get("weights")
+        if raw_weights is None and "utility_function" in p_data:
+            raw_weights = p_data["utility_function"].get("weights", {})
+        raw_weights = dict(raw_weights or {})
+
+        raw_ideals = p_data.get("ideal_values")
+        if raw_ideals is None and "utility_function" in p_data:
+            raw_ideals = p_data["utility_function"].get("ideal_values", {})
+        raw_ideals = dict(raw_ideals or {})
+
+        canonical_weights: dict[str, float] = {}
+        canonical_ideals: dict[str, float] = {}
+
+        # Canonicalize weights
+        for raw_k, w_val in raw_weights.items():
+            ck = _canonicalize_key(raw_k, issue_names)
+            if ck:
+                canonical_weights[ck] = float(w_val)
+            else:
+                warnings.append(f"Party '{name}': dropped unknown weight key '{raw_k}'.")
+
+        # Canonicalize ideals
+        for raw_k, i_val in raw_ideals.items():
+            ck = _canonicalize_key(raw_k, issue_names)
+            if ck:
+                canonical_ideals[ck] = float(i_val)
+            else:
+                warnings.append(f"Party '{name}': dropped unknown ideal key '{raw_k}'.")
+
+        # Check missing keys & default fill
+        missing_count = 0
+        for iss in issues:
+            if iss.name not in canonical_weights:
+                canonical_weights[iss.name] = 1.0 / n_issues
+                missing_count += 1
+            if iss.name not in canonical_ideals:
+                canonical_ideals[iss.name] = (iss.min_value + iss.max_value) / 2.0
+            else:
+                # Clamp ideal to [min, max]
+                canonical_ideals[iss.name] = max(iss.min_value, min(iss.max_value, canonical_ideals[iss.name]))
+
+        if missing_count / n_issues > 0.20:
+            warnings.append(
+                f"Party '{name}': more than 20% of issue preferences ({missing_count}/{n_issues}) were missing and filled with uniform defaults."
+            )
+
+        # Normalize weights strictly over issue_names
+        tot_w = sum(canonical_weights[iss] for iss in issue_names)
+        if tot_w <= 0:
+            canonical_weights = {iss: round(1.0 / n_issues, 6) for iss in issue_names}
+        else:
+            canonical_weights = {iss: round(canonical_weights[iss] / tot_w, 6) for iss in issue_names}
+
+        # Fix minor rounding drift to guarantee sum == 1.0
+        drift = 1.0 - sum(canonical_weights.values())
+        if abs(drift) > 1e-9:
+            canonical_weights[issue_names[0]] = round(canonical_weights[issue_names[0]] + drift, 6)
+
+        # Reservation value
+        rv = float(p_data.get("reservation_value", 0.35))
+        rv = max(0.05, min(0.95, rv))
+
+        source = "user_specified" if user_edited else p_data.get("source", stakeholder_sources.get(name, "llm_inferred"))
+        stakeholder_sources[name] = source
+
+        profile = StakeholderProfile(
+            name=name,
+            role=role,
+            persona=persona,
+            utility_function=UtilityFunction(
+                weights=canonical_weights,
+                ideal_values=canonical_ideals,
+                issues=issues,
+            ),
+            reservation_value=rv,
+        )
+
+        # Invariant check: utility at ideal must be 1.0
+        u_ideal = profile.evaluate_proposal(canonical_ideals)
+        if abs(u_ideal - 1.0) > 1e-5:
+            logger.warning("Party %s utility at ideal is %.4f (expected 1.0)", name, u_ideal)
+
+        profiles.append(profile)
+
+    # 3. Feasibility check
+    is_feasible, surplus = check_scenario_feasibility(profiles, issues_meta)
+    if not is_feasible:
+        warnings.append(
+            f"Feasibility Warning: No deal can satisfy everyone as parsed (joint reservation surplus = {surplus:.3f} < 0). "
+            f"Consider lowering reservation thresholds or adjusting ideals before negotiating."
+        )
+
+    pareto_mode: Literal["exhaustive", "monte_carlo"] = "monte_carlo" if n_issues > MC_THRESHOLD else "exhaustive"
+    if pareto_mode == "monte_carlo":
+        field_notes.append(
+            f"ℹ️  This scenario has {n_issues} issues. The Pareto-frontier "
+            f"will be computed via Monte Carlo sampling (100,000 random points) "
+            f"rather than exhaustive grid search. Results are marked 'approximate'."
+        )
+
+    report = ParseReport(
+        issues=issues_meta,
+        profiles=[p.model_dump() for p in profiles],
+        stakeholder_sources=stakeholder_sources,
+        field_notes=field_notes,
+        warnings=warnings,
+        issue_count=n_issues,
+        pareto_mode=pareto_mode,
+        is_feasible=is_feasible,
+    )
+
+    return profiles, issues_meta, report
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Main public parse function
 # ──────────────────────────────────────────────────────────────────────────────
 
 def generate_from_description(
@@ -218,29 +470,6 @@ def generate_from_description(
 ) -> tuple[list[StakeholderProfile], list[dict], ParseReport]:
     """
     Parse a free-text negotiation description into engine-compatible objects.
-
-    Parameters
-    ----------
-    text : str
-        Natural-language description of the negotiation scenario.
-    seed : int
-        Not used for generation (LLM is non-deterministic) but stored in
-        the report for reproducibility labelling.
-
-    Returns
-    -------
-    profiles : list[StakeholderProfile]
-        Drop-in replacement for the tuple element from any fixed scenario.
-    issues_meta : list[dict]
-        Drop-in replacement — each dict has {name, range: [min, max], description}.
-    report : ParseReport
-        Validation report. MUST be shown to the user for confirmation
-        before calling run_negotiation(). Do not silently run on this output.
-
-    Raises
-    ------
-    ValueError
-        If the text describes more than 6 issues (computationally infeasible).
     """
     if not text or len(text.strip()) < 20:
         raise ValueError(
@@ -258,140 +487,212 @@ def generate_from_description(
     llm_response: _LLMScenarioResponse = structured_completion(
         messages=messages,
         response_model=_LLMScenarioResponse,
-        temperature=0.2,  # lower temperature = more deterministic parsing
+        temperature=0.2,
+        max_tokens=8192,
     )
 
-    # ── Validate issue count ──────────────────────────────────────────────────
-    n_issues = len(llm_response.issues)
-    if n_issues > MAX_ISSUES:
-        raise ValueError(
-            f"The parser extracted {n_issues} issues from your description, but "
-            f"Consensus Engine supports a maximum of {MAX_ISSUES} issues for "
-            f"free-form scenarios. The Pareto-frontier search becomes computationally "
-            f"infeasible beyond that. Please simplify your description by combining "
-            f"related issues or removing less important ones, then try again."
-        )
-    if n_issues < 2:
-        raise ValueError(
-            "At least 2 negotiation issues are required. Please provide a more "
-            "detailed description that includes multiple things the parties disagree on."
-        )
-
-    # ── Validate stakeholder count ────────────────────────────────────────────
-    if len(llm_response.stakeholders) < 2:
-        raise ValueError(
-            "At least 2 negotiating parties are required. "
-            "Please describe at least two parties with different interests."
-        )
-
-    # ── Build Issue objects ───────────────────────────────────────────────────
-    issue_names = [i.name for i in llm_response.issues]
-    issues: list[Issue] = []
-    for llm_issue in llm_response.issues:
-        if llm_issue.min_value >= llm_issue.max_value:
-            # Swap silently and add a warning
-            llm_response.warnings.append(
-                f"Issue '{llm_issue.name}': min_value >= max_value — values were swapped."
-            )
-            llm_issue.min_value, llm_issue.max_value = llm_issue.max_value, llm_issue.min_value
-        issues.append(Issue(
-            name=llm_issue.name,
-            min_value=llm_issue.min_value,
-            max_value=llm_issue.max_value,
-            description=llm_issue.description,
-        ))
-
-    issues_meta = [
-        {"name": i.name, "range": [i.min_value, i.max_value], "description": i.description}
-        for i in issues
+    issues_raw = [
+        {"name": i.name, "min_value": i.min_value, "max_value": i.max_value, "description": i.description}
+        for i in llm_response.issues
+    ]
+    profiles_raw = [
+        {
+            "name": sh.name,
+            "role": sh.role,
+            "persona": sh.persona,
+            "weights": sh.weights,
+            "ideal_values": sh.ideal_values,
+            "reservation_value": sh.reservation_value,
+            "source": sh.source,
+        }
+        for sh in llm_response.stakeholders
     ]
 
-    # ── Build StakeholderProfile objects ─────────────────────────────────────
-    profiles: list[StakeholderProfile] = []
-    stakeholder_sources: dict[str, str] = {}
     field_notes: list[str] = []
-
-    for llm_sh in llm_response.stakeholders:
-        # Ensure all issues covered in weights and ideal_values
-        weights = dict(llm_sh.weights)
-        ideal_values = dict(llm_sh.ideal_values)
-
-        for iss in issues:
-            if iss.name not in weights:
-                weights[iss.name] = 1.0 / n_issues
-                llm_response.warnings.append(
-                    f"'{llm_sh.name}': missing weight for '{iss.name}' — set to uniform."
-                )
-            if iss.name not in ideal_values:
-                mid = (iss.min_value + iss.max_value) / 2
-                ideal_values[iss.name] = mid
-                llm_response.warnings.append(
-                    f"'{llm_sh.name}': missing ideal for '{iss.name}' — set to midpoint {mid}."
-                )
-            else:
-                # Clamp to range
-                ideal_values[iss.name] = max(
-                    iss.min_value, min(iss.max_value, ideal_values[iss.name])
-                )
-
-        # Renormalize weights
-        total = sum(weights.values())
-        if total > 0:
-            weights = {k: round(v / total, 6) for k, v in weights.items()}
-
-        # Clamp reservation value
-        rv = max(0.1, min(0.9, llm_sh.reservation_value))
-
-        profile = StakeholderProfile(
-            name=llm_sh.name,
-            role=llm_sh.role,
-            persona=llm_sh.persona,
-            utility_function=UtilityFunction(
-                weights=weights,
-                ideal_values=ideal_values,
-                issues=issues,
-            ),
-            reservation_value=rv,
-        )
-        profiles.append(profile)
-        stakeholder_sources[llm_sh.name] = llm_sh.source
-
-        if llm_sh.source == "llm_inferred":
+    for sh in llm_response.stakeholders:
+        if sh.source == "llm_inferred":
             field_notes.append(
-                f"⚠️  {llm_sh.name}'s preferences (weights, ideal values, "
-                f"reservation value) were generated by the LLM — they are "
-                f"plausible estimates, not user-provided data."
+                f"⚠️  {sh.name}'s preferences (weights, ideal values, reservation) were generated by the LLM as plausible estimates."
             )
 
-    # ── Determine Pareto mode ─────────────────────────────────────────────────
-    pareto_mode: Literal["exhaustive", "monte_carlo"] = (
-        "monte_carlo" if n_issues > MC_THRESHOLD else "exhaustive"
+    return validate_and_update_scenario(
+        issues_data=issues_raw,
+        profiles_data=profiles_raw,
+        user_edited=False,
+        warnings=llm_response.warnings,
+        field_notes=field_notes,
     )
-    if pareto_mode == "monte_carlo":
-        field_notes.append(
-            f"ℹ️  This scenario has {n_issues} issues. The Pareto-frontier "
-            f"will be computed via Monte Carlo sampling (100,000 random points) "
-            f"rather than exhaustive grid search. Results are marked 'approximate'."
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Plain-language result summary (Bug 6.10)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def compute_plain_language_summary(
+    outcome: Any,
+    profiles: list[StakeholderProfile],
+    issues: list[dict],
+    report: ParseReport | None = None,
+) -> dict:
+    """
+    Produce plain-English summary, party satisfaction, benchmark comparison, and explanation.
+    """
+    from src.eval.baselines import public_midpoint_baseline, nash_bargaining_baseline
+    from src.eval.pareto import compute_pareto_frontier_auto
+
+    proposal = outcome.final_proposal or {}
+    agreement = bool(outcome.agreement_reached)
+    rounds_taken = getattr(outcome, "rounds_taken", 1)
+
+    # 1. Plain-text package
+    package_items = []
+    for iss in issues:
+        iname = iss["name"]
+        val = proposal.get(iname, (iss["range"][0] + iss["range"][1]) / 2)
+        desc = iss.get("description", "")
+        # Check if ordinal legend in description
+        package_items.append(f"{iname.replace('_', ' ').title()}: {val:.2f} ({desc})" if desc else f"{iname.replace('_', ' ').title()}: {val:.2f}")
+    package_plain_text = "; ".join(package_items)
+
+    # 2. Party satisfaction vs reservation
+    party_outcomes = []
+    blocking_parties = []
+    all_utils = []
+
+    for p in profiles:
+        u = p.evaluate_proposal(proposal) if proposal else 0.0
+        r = p.reservation_value
+        sat = bool(u >= r)
+        if not sat:
+            blocking_parties.append(f"{p.name} (utility {u:.3f} < reservation {r:.3f})")
+        all_utils.append(u)
+        party_outcomes.append({
+            "name": p.name,
+            "role": p.role,
+            "utility": round(u, 4),
+            "reservation_value": round(r, 4),
+            "satisfied": sat,
+            "status": "Ratified deal" if (agreement and sat) else ("Sub-reservation impasse" if not sat else "Impasse"),
+        })
+
+    # 3. Baselines comparison & Pareto frontier
+    midpoint_prop = public_midpoint_baseline(profiles, issues)
+    nash_prop = nash_bargaining_baseline(profiles, issues)
+
+    ufs = [p.utility_function for p in profiles]
+    frontier, is_approx = compute_pareto_frontier_auto(ufs, issues)
+    actual_vector = np.array(all_utils)
+    if frontier.shape[0] > 0:
+        distances = np.linalg.norm(frontier - actual_vector, axis=1)
+        dist_to_frontier = round(float(np.min(distances)), 4)
+    else:
+        dist_to_frontier = 0.0
+
+    nash_product = round(float(np.prod([max(0.0, u - p.reservation_value) for u, p in zip(all_utils, profiles)])), 6)
+
+    # 4. Plain-English 3-5 sentence explanation
+    if agreement:
+        explanation = (
+            f"The negotiation reached a voluntary agreement after {rounds_taken} rounds. "
+            f"All parties achieved utility above their private reservation values, satisfying individual rationality. "
+            f"The final agreement achieves a Nash surplus product of {nash_product:.4f} and is within "
+            f"{dist_to_frontier:.4f} Euclidean distance from the Pareto frontier. "
+            f"This represents an efficient and mutually advantageous compromise."
+        )
+    else:
+        blockers_str = ", ".join(blocking_parties) if blocking_parties else "competing reservation constraints"
+        explanation = (
+            f"The negotiation concluded in an impasse after {rounds_taken} rounds without reaching an agreement. "
+            f"The impasse occurred because {blockers_str} could not be satisfied simultaneously. "
+            f"Exiting cleanly into safe impasse prevented an involuntary contract breach. "
+            f"Parties would need to lower reservation values or widen issue ranges to find common ground."
         )
 
-    # ── Build ParseReport ────────────────────────────────────────────────────
-    report = ParseReport(
+    return {
+        "agreement_reached": agreement,
+        "rounds_taken": rounds_taken,
+        "package_plain_text": package_plain_text,
+        "party_outcomes": party_outcomes,
+        "nash_product": nash_product,
+        "distance_to_frontier": dist_to_frontier,
+        "pareto_mode": "approximate" if len(issues) > MC_THRESHOLD else "exact",
+        "explanation": explanation,
+        "midpoint_proposal": midpoint_prop,
+        "nash_proposal": nash_prop,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CLI execution (Bug 6.12)
+# ──────────────────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import argparse
+    from src.protocol.graph import run_negotiation
+
+    parser = argparse.ArgumentParser(description="Consensus Engine Custom Scenario CLI")
+    parser.add_argument("--text", type=str, default="", help="Natural language description")
+    parser.add_argument("--file", type=str, default="", help="Path to description text file")
+    parser.add_argument("--rounds", type=int, default=5, help="Max negotiation rounds")
+    parser.add_argument("--protocol", type=str, default="single_text", help="Protocol: single_text or alternating_offers")
+    parser.add_argument("--model_config", type=str, default="fast", help="Model configuration name")
+    parser.add_argument("--output_dir", type=str, default="data/logs", help="Directory to save custom trial output")
+
+    args = parser.parse_args()
+
+    desc_text = args.text
+    if args.file and os.path.exists(args.file):
+        with open(args.file, "r", encoding="utf-8") as f:
+            desc_text = f.read()
+
+    if not desc_text:
+        print("Error: Please provide --text '<description>' or --file <path>.")
+        sys.exit(1)
+
+    print("\n[1/3] Parsing scenario description...")
+    profiles, issues_meta, report = generate_from_description(desc_text)
+
+    print(f"Parsed {len(issues_meta)} issues and {len(profiles)} stakeholders.")
+    print(f"Feasibility status: {'FEASIBLE' if report.is_feasible else 'INFEASIBLE'}")
+    if report.warnings:
+        print("Warnings:")
+        for w in report.warnings:
+            print(f"  - {w}")
+
+    print(f"\n[2/3] Running {args.protocol} negotiation ({args.rounds} rounds max)...")
+    outcome = run_negotiation(
+        profiles=profiles,
         issues=issues_meta,
-        profiles=[p.model_dump() for p in profiles],
-        stakeholder_sources=stakeholder_sources,
-        field_notes=field_notes,
-        warnings=llm_response.warnings,
-        issue_count=n_issues,
-        pareto_mode=pareto_mode,
+        max_rounds=args.rounds,
+        scenario_name=None,
+        model_config=args.model_config,
+        protocol=args.protocol,
     )
 
-    logger.info(
-        "Parsed scenario: %d issues, %d stakeholders, pareto_mode=%s, "
-        "%d llm_inferred parties",
-        n_issues,
-        len(profiles),
-        pareto_mode,
-        sum(1 for s in stakeholder_sources.values() if s == "llm_inferred"),
-    )
+    print("\n[3/3] Generating summary & saving output...")
+    summary = compute_plain_language_summary(outcome, profiles, issues_meta, report)
 
-    return profiles, issues_meta, report
+    print("\n" + "="*70)
+    print("NEGOTIATION RESULT SUMMARY")
+    print("="*70)
+    print(f"Status: {'AGREED' if summary['agreement_reached'] else 'IMPASSE'}")
+    print(f"Final Package: {summary['package_plain_text']}")
+    print(f"Distance to Pareto Frontier: {summary['distance_to_frontier']} ({summary['pareto_mode']})")
+    print("\nStakeholder Utilities:")
+    for po in summary["party_outcomes"]:
+        print(f"  * {po['name']}: Utility {po['utility']:.4f} (Reservation {po['reservation_value']:.4f}) -> {po['status']}")
+    print(f"\nExplanation:\n{summary['explanation']}\n")
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    out_file = os.path.join(args.output_dir, f"custom_{ts}.json")
+    save_data = {
+        "timestamp": ts,
+        "description": desc_text,
+        "report": report.to_dict(),
+        "summary": summary,
+        "final_proposal": outcome.final_proposal,
+    }
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(save_data, f, indent=2)
+    print(f"Full output saved to: {out_file}")

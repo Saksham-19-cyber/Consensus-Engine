@@ -81,13 +81,14 @@ def _call_groq(
     model: str,
     temperature: float,
     response_format: dict | None = None,
+    max_tokens: int = 4096,
 ) -> str:
     client = get_client()
     kwargs = {
         "messages": messages,
         "model": model,
         "temperature": temperature,
-        "max_tokens": 4096,
+        "max_tokens": max_tokens,
     }
     if response_format:
         kwargs["response_format"] = response_format
@@ -113,10 +114,12 @@ def structured_completion(
     model: str | None = None,
     temperature: float | None = None,
     max_retries: int | None = None,
+    max_tokens: int | None = None,
 ) -> T:
     model = model or settings.negotiator_model
     temperature = temperature if temperature is not None else settings.temperature
     max_retries = max_retries if max_retries is not None else settings.max_retries
+    tokens = max_tokens or 4096
 
     schema = _pydantic_to_json_schema(response_model)
     response_format = {
@@ -140,7 +143,7 @@ def structured_completion(
     last_error = None
     for attempt in range(max_retries):
         try:
-            raw = _call_groq(patched_messages, model, temperature, response_format)
+            raw = _call_groq(patched_messages, model, temperature, response_format, max_tokens=tokens)
             cleaned_raw = raw.strip()
             if cleaned_raw.startswith("```"):
                 lines = cleaned_raw.splitlines()

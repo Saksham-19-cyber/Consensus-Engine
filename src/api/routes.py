@@ -3,7 +3,7 @@ import asyncio
 import json
 import logging
 import uuid
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
 
 from src.api.schemas import (
     NegotiateRequest,
@@ -14,6 +14,8 @@ from src.api.schemas import (
     ParseScenarioResponse,
     ParsedIssueOut,
     ParsedStakeholderOut,
+    UpdateScenarioRequest,
+    JobStatusResponse,
 )
 from src.protocol.graph import run_negotiation
 from src.models.negotiation import NegotiationMessage
@@ -32,6 +34,9 @@ from scenarios.generator import get_scenario, make_scenario_generator
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Background job registry
+_JOBS: dict[str, dict] = {}
+
 
 @router.get("/scenarios")
 async def list_scenarios():
@@ -44,18 +49,95 @@ async def list_scenarios():
     }
 
 
-@router.post("/negotiate", response_model=SessionResponse)
-async def start_negotiation(req: NegotiateRequest):
-    session_id = str(uuid.uuid4())[:8]
+async def _execute_negotiation_job(
+    job_id: str,
+    profiles: list,
+    issues: list,
+    max_rounds: int,
+    scenario_name: str,
+    protocol: str,
+    model_config_name: str,
+    is_custom: bool,
+):
+    collected_messages = []
+
+    def on_message(msg: NegotiationMessage):
+        collected_messages.append(msg)
+        if job_id in _JOBS:
+            _JOBS[job_id]["messages"] = [m.model_dump() for m in collected_messages]
+
+    try:
+        loop = asyncio.get_event_loop()
+        outcome = await loop.run_in_executor(
+            None,
+            lambda: run_negotiation(
+                profiles=profiles,
+                issues=issues,
+                max_rounds=max_rounds,
+                on_message=on_message,
+                scenario_name=scenario_name if not is_custom else None,
+                protocol=protocol,
+                model_config=model_config_name,
+            ),
+        )
+
+        await update_session_outcome(job_id, outcome.status.value, outcome.model_dump())
+
+        for msg in collected_messages:
+            await store_message(
+                session_id=job_id,
+                round_number=msg.round_number,
+                agent_name=msg.agent_name,
+                role=msg.role,
+                content=msg.content,
+                message_type=msg.message_type,
+                metadata=msg.metadata,
+            )
+
+        try:
+            store_negotiation_outcome(
+                session_id=job_id,
+                scenario_name=scenario_name,
+                outcome=outcome.model_dump(),
+                profiles=[p.model_dump() for p in profiles],
+                issues=issues,
+            )
+        except Exception as e:
+            logger.warning("failed to store in chromadb: %s", e)
+
+        summary = None
+        if is_custom:
+            from scenarios.from_text import compute_plain_language_summary
+            summary = compute_plain_language_summary(outcome, profiles, issues)
+
+        if job_id in _JOBS:
+            _JOBS[job_id]["status"] = "completed"
+            _JOBS[job_id]["outcome"] = outcome.model_dump()
+            _JOBS[job_id]["messages"] = [m.model_dump() for m in collected_messages]
+            _JOBS[job_id]["summary"] = summary
+
+    except Exception as e:
+        logger.exception("Error during negotiation job %s: %s", job_id, e)
+        if job_id in _JOBS:
+            _JOBS[job_id]["status"] = "failed"
+            _JOBS[job_id]["error"] = str(e)
+
+
+@router.post("/negotiate")
+async def start_negotiation(
+    req: NegotiateRequest,
+    background_tasks: BackgroundTasks,
+    sync: bool = False,
+):
+    job_id = str(uuid.uuid4())[:8]
+    is_custom = False
 
     # ── Free-form mode: decode pre-parsed token ──────────────────────────────
     if req.parsed_scenario_token:
         from scenarios.from_text import ParseReport
         try:
-            # Security Note: Token is unsigned base64-encoded JSON; schema is verified
-            # via Pydantic model validation on decode. Semantic tampering (e.g. altered
-            # weights) is an accepted limitation for this auth-less research/demo tool.
             profiles, issues = ParseReport.decode_token(req.parsed_scenario_token)
+            is_custom = True
         except Exception as e:
             raise HTTPException(
                 status_code=400,
@@ -71,74 +153,91 @@ async def start_negotiation(req: NegotiateRequest):
         profiles, issues = scenario.generate(seed=req.seed)
         scenario_name = req.scenario
 
-    await create_session(session_id, scenario_name, {
+    await create_session(job_id, scenario_name, {
         "n_agents": len(profiles),
         "max_rounds": req.max_rounds,
         "seed": req.seed,
     })
 
-    collected_messages = []
+    _JOBS[job_id] = {
+        "job_id": job_id,
+        "session_id": job_id,
+        "status": "running",
+        "scenario": scenario_name,
+        "messages": [],
+        "outcome": None,
+        "summary": None,
+        "error": None,
+    }
 
-    def on_message(msg: NegotiationMessage):
-        collected_messages.append(msg)
-
-    loop = asyncio.get_event_loop()
-    outcome = await loop.run_in_executor(
-        None,
-        lambda: run_negotiation(
+    if sync:
+        await _execute_negotiation_job(
+            job_id=job_id,
             profiles=profiles,
             issues=issues,
             max_rounds=req.max_rounds,
-            on_message=on_message,
             scenario_name=scenario_name,
             protocol=req.protocol,
-        ),
-    )
-
-    await update_session_outcome(session_id, outcome.status.value, outcome.model_dump())
-
-    for msg in collected_messages:
-        await store_message(
-            session_id=session_id,
-            round_number=msg.round_number,
-            agent_name=msg.agent_name,
-            role=msg.role,
-            content=msg.content,
-            message_type=msg.message_type,
-            metadata=msg.metadata,
+            model_config_name=req.model_config_name,
+            is_custom=is_custom,
+        )
+        job = _JOBS[job_id]
+        if job["status"] == "failed":
+            raise HTTPException(status_code=500, detail=job["error"])
+        return SessionResponse(
+            session_id=job_id,
+            scenario=scenario_name,
+            status=job["outcome"].get("status", "completed") if job["outcome"] else "completed",
+            outcome=job["outcome"],
+            messages=job["messages"],
         )
 
-    try:
-        store_negotiation_outcome(
-            session_id=session_id,
-            scenario_name=scenario_name,
-            outcome=outcome.model_dump(),
-            profiles=[p.model_dump() for p in profiles],
-            issues=issues,
-        )
-    except Exception as e:
-        logger.warning("failed to store in chromadb: %s", e)
-
-    return SessionResponse(
-        session_id=session_id,
-        scenario=scenario_name,
-        status=outcome.status.value,
-        outcome=outcome.model_dump(),
-        messages=[m.model_dump() for m in collected_messages],
+    background_tasks.add_task(
+        _execute_negotiation_job,
+        job_id=job_id,
+        profiles=profiles,
+        issues=issues,
+        max_rounds=req.max_rounds,
+        scenario_name=scenario_name,
+        protocol=req.protocol,
+        model_config_name=req.model_config_name,
+        is_custom=is_custom,
     )
+
+    return {
+        "job_id": job_id,
+        "session_id": job_id,
+        "status": "running",
+        "scenario": scenario_name,
+        "messages": [],
+    }
+
+
+@router.get("/negotiate/{job_id}", response_model=JobStatusResponse)
+async def get_negotiation_job_status(job_id: str):
+    """Poll progress of a background negotiation job."""
+    if job_id not in _JOBS:
+        session = await get_session(job_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Negotiation job not found")
+        messages = await get_session_messages(job_id)
+        outcome = json.loads(session["outcome_json"]) if session.get("outcome_json") else None
+        return JobStatusResponse(
+            job_id=job_id,
+            session_id=job_id,
+            status=session.get("status", "completed"),
+            scenario=session.get("scenario_name", "unknown"),
+            messages=messages,
+            outcome=outcome,
+        )
+
+    return _JOBS[job_id]
 
 
 @router.post("/scenario/parse", response_model=ParseScenarioResponse)
 async def parse_scenario(req: ParseScenarioRequest):
     """
     Parse a free-text negotiation description into structured scenario objects.
-
-    IMPORTANT: This endpoint does NOT run a negotiation. It returns a
-    validation report (ParseScenarioResponse) that MUST be shown to the
-    user for confirmation before calling POST /api/negotiate.
-
-    Free-form scenarios are unvalidated / exploratory and are NOT covered
-    by the N=30 statistical benchmarks in the README.
     """
     from scenarios.from_text import generate_from_description
 
@@ -153,7 +252,6 @@ async def parse_scenario(req: ParseScenarioRequest):
 
     profiles, issues_meta, report = result
 
-    # Build per-stakeholder output objects (with source provenance)
     stakeholders_out = []
     for profile in profiles:
         source = report.stakeholder_sources.get(profile.name, "llm_inferred")
@@ -184,8 +282,62 @@ async def parse_scenario(req: ParseScenarioRequest):
         warnings=report.warnings,
         pareto_mode=report.pareto_mode,
         issue_count=report.issue_count,
+        is_feasible=report.is_feasible,
         parsed_scenario_token=report.to_token(),
     )
+
+
+@router.post("/scenario/update", response_model=ParseScenarioResponse)
+async def update_scenario(req: UpdateScenarioRequest):
+    """
+    Re-validate user-edited scenario values server-side.
+    Marks edited fields as user_specified and runs feasibility check.
+    """
+    from scenarios.from_text import validate_and_update_scenario
+
+    try:
+        profiles, issues_meta, report = validate_and_update_scenario(
+            issues_data=req.issues,
+            profiles_data=req.stakeholders,
+            user_edited=True,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    stakeholders_out = []
+    for profile in profiles:
+        source = report.stakeholder_sources.get(profile.name, "user_specified")
+        stakeholders_out.append(ParsedStakeholderOut(
+            name=profile.name,
+            role=profile.role,
+            persona=profile.persona,
+            source=source,
+            weights=profile.utility_function.weights,
+            ideal_values=profile.utility_function.ideal_values,
+            reservation_value=profile.reservation_value,
+        ))
+
+    issues_out = [
+        ParsedIssueOut(
+            name=i["name"],
+            min_value=i["range"][0],
+            max_value=i["range"][1],
+            description=i.get("description", ""),
+        )
+        for i in issues_meta
+    ]
+
+    return ParseScenarioResponse(
+        issues=issues_out,
+        stakeholders=stakeholders_out,
+        field_notes=report.field_notes,
+        warnings=report.warnings,
+        pareto_mode=report.pareto_mode,
+        issue_count=report.issue_count,
+        is_feasible=report.is_feasible,
+        parsed_scenario_token=report.to_token(),
+    )
+
 
 
 @router.get("/sessions/{session_id}", response_model=SessionResponse)

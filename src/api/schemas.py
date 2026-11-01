@@ -89,5 +89,25 @@ class ParseScenarioResponse(BaseModel):
     warnings: list[str]      # parser warnings about ambiguities
     pareto_mode: str          # "exhaustive" | "monte_carlo"
     issue_count: int
+    is_feasible: bool = True
     # Opaque token: send back as parsed_scenario_token in POST /api/negotiate
     parsed_scenario_token: str
+
+
+class UpdateScenarioRequest(BaseModel):
+    """Request body for POST /api/scenario/update to re-validate user edits."""
+    issues: list[dict]
+    stakeholders: list[dict]
+
+
+class JobStatusResponse(BaseModel):
+    """Response model for polling background negotiation jobs."""
+    job_id: str
+    session_id: str
+    status: str  # "running" | "completed" | "failed"
+    scenario: str
+    messages: list[dict] = Field(default_factory=list)
+    outcome: dict | None = None
+    summary: dict | None = None
+    error: str | None = None
+

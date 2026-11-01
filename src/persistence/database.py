@@ -3,7 +3,7 @@ import aiosqlite
 import json
 import logging
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ async def create_session(session_id: str, scenario: str, config: dict):
     async with aiosqlite.connect(_get_db_path()) as db:
         await db.execute(
             "INSERT INTO sessions (id, scenario, created_at, config_json) VALUES (?, ?, ?, ?)",
-            (session_id, scenario, datetime.utcnow().isoformat(), json.dumps(config)),
+            (session_id, scenario, datetime.now(timezone.utc).isoformat(), json.dumps(config)),
         )
         await db.commit()
 
@@ -96,7 +96,7 @@ async def store_message(
     async with aiosqlite.connect(_get_db_path()) as db:
         await db.execute(
             "INSERT INTO messages (session_id, round_number, agent_name, role, content, message_type, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (session_id, round_number, agent_name, role, content, message_type, json.dumps(metadata), datetime.utcnow().isoformat()),
+            (session_id, round_number, agent_name, role, content, message_type, json.dumps(metadata), datetime.now(timezone.utc).isoformat()),
         )
         await db.commit()
 

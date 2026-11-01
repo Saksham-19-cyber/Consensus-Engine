@@ -22,9 +22,9 @@ interface RoundEvent {
   mediatorReasoning?: string;
   critiques: Array<{
     agent: string;
-    satisfaction: number;
-    acceptable: boolean;
-    concession: number;
+    satisfaction: number | string;
+    acceptable: boolean | string;
+    concession: number | string;
     reasoning: string;
     bluffFlag?: boolean;
   }>;
@@ -173,9 +173,9 @@ export const NegotiationRunner: React.FC = () => {
           } else {
             curr.critiques.push({
               agent: m.agent_name,
-              satisfaction: m.metadata?.satisfaction_score || 7.0,
-              acceptable: m.metadata?.acceptable ?? true,
-              concession: m.metadata?.concession_willingness || 0.3,
+              satisfaction: m.metadata?.satisfaction_score ?? 'n/a',
+              acceptable: m.metadata?.acceptable ?? 'n/a',
+              concession: m.metadata?.concession_willingness ?? 'n/a',
               reasoning: m.content,
               bluffFlag: m.metadata?.bluff_suspected || false,
             });
@@ -422,11 +422,15 @@ export const NegotiationRunner: React.FC = () => {
                   <div className="space-y-1">
                     <div className="flex justify-between text-zinc-400">
                       <span>Satisfaction:</span>
-                      <span className="font-mono text-zinc-200">{c.satisfaction.toFixed(1)}/10</span>
+                      <span className="font-mono text-zinc-200">
+                        {typeof c.satisfaction === 'number' ? `${c.satisfaction.toFixed(1)}/10` : c.satisfaction}
+                      </span>
                     </div>
                     <div className="flex justify-between text-zinc-400">
                       <span>Concession W.:</span>
-                      <span className="font-mono text-zinc-200">{(c.concession * 100).toFixed(0)}%</span>
+                      <span className="font-mono text-zinc-200">
+                        {typeof c.concession === 'number' ? `${(c.concession * 100).toFixed(0)}%` : c.concession}
+                      </span>
                     </div>
                   </div>
 

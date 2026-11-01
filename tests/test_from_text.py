@@ -319,3 +319,191 @@ class TestGenerateFromDescription:
         party0_ideal = profiles[0].utility_function.ideal_values.get("issue_1")
         assert party0_ideal is not None
         assert abs(party0_ideal - expected_mid) < 0.5  # midpoint, allowing small float drift
+
+    @patch("scenarios.from_text.structured_completion")
+    def test_key_mismatch_regression_utility_at_ideal(self, mock_sc):
+        """
+        Bug 6.1: When LLM keys weights by display names ('License Fee') rather than
+        exact issue names ('license_fee'), the parser must canonicalize keys or drop unknowns
+        and renormalize over real issues only.
+        Invariant: weights sum to 1.0 over exactly the issue set, and utility at ideal == 1.0.
+        """
+        issues = [
+            _LLMIssue(name="license_fee", min_value=100.0, max_value=500.0, description="Annual fee"),
+            _LLMIssue(name="contract_duration", min_value=1.0, max_value=5.0, description="Years"),
+        ]
+        # Party 0 uses display name "License Fee" instead of "license_fee"
+        stakeholders = [
+            _LLMStakeholder(
+                name="Buyer",
+                role="Buyer",
+                persona="Wants cheap price",
+                weights={"License Fee": 0.6, "contract_duration": 0.4},
+                ideal_values={"License Fee": 100.0, "contract_duration": 1.0},
+                reservation_value=0.4,
+                source="user_specified",
+            ),
+            _LLMStakeholder(
+                name="Vendor",
+                role="Vendor",
+                persona="Wants high price",
+                weights={"license_fee": 0.7, "contract_duration": 0.3},
+                ideal_values={"license_fee": 500.0, "contract_duration": 5.0},
+                reservation_value=0.4,
+                source="llm_inferred",
+            ),
+        ]
+        mock_sc.return_value = _LLMScenarioResponse(issues=issues, stakeholders=stakeholders, warnings=[])
+
+        profiles, issues_meta, report = generate_from_description(
+            "Negotiation over software license fee and contract duration between Buyer and Vendor.", seed=42
+        )
+
+        for p in profiles:
+            # Invariant 1: weights must contain exactly the issue names, nothing else
+            assert set(p.utility_function.weights.keys()) == {"license_fee", "contract_duration"}
+            # Invariant 2: weights sum to 1.0
+            assert sum(p.utility_function.weights.values()) == pytest.approx(1.0, abs=1e-6)
+            # Invariant 3: utility at party's own ideal point == 1.0
+            u_ideal = p.evaluate_proposal(p.utility_function.ideal_values)
+            assert u_ideal == pytest.approx(1.0, abs=1e-5)
+
+    @patch("scenarios.from_text.structured_completion")
+    def test_infeasible_reservations_detected(self, mock_sc):
+        """Bug 6.2: Opposing parties with unreachable reservations must be flagged as infeasible."""
+        issues = [
+            _LLMIssue(name="price", min_value=0.0, max_value=100.0, description="Price in dollars"),
+            _LLMIssue(name="quantity", min_value=1.0, max_value=10.0, description="Quantity"),
+        ]
+        # Opposing ideals with strict 0.95 reservations
+        stakeholders = [
+            _LLMStakeholder(
+                name="Buyer",
+                role="Buyer",
+                persona="Buyer",
+                weights={"price": 0.5, "quantity": 0.5},
+                ideal_values={"price": 0.0, "quantity": 10.0},
+                reservation_value=0.95,
+                source="user_specified",
+            ),
+            _LLMStakeholder(
+                name="Seller",
+                role="Seller",
+                persona="Seller",
+                weights={"price": 0.5, "quantity": 0.5},
+                ideal_values={"price": 100.0, "quantity": 1.0},
+                reservation_value=0.95,
+                source="user_specified",
+            ),
+        ]
+        mock_sc.return_value = _LLMScenarioResponse(issues=issues, stakeholders=stakeholders, warnings=[])
+
+        profiles, issues_meta, report = generate_from_description(
+            "Extreme opposition negotiation between Buyer and Seller.", seed=42
+        )
+        assert report.is_feasible is False
+        assert any("No deal can satisfy everyone" in w for w in report.warnings)
+
+    def test_user_edits_round_trip(self):
+        """Bug 6.3: User edits should re-validate server-side and mark source as user_specified."""
+        from scenarios.from_text import validate_and_update_scenario
+
+        issues_data = [
+            {"name": "salary", "range": [50000.0, 150000.0], "description": "Annual salary in USD"},
+            {"name": "vacation_days", "range": [10.0, 30.0], "description": "PTO days per year"},
+        ]
+        profiles_data = [
+            {
+                "name": "Candidate",
+                "role": "Candidate",
+                "persona": "Experienced engineer",
+                "weights": {"salary": 0.8, "vacation_days": 0.2},
+                "ideal_values": {"salary": 140000.0, "vacation_days": 28.0},
+                "reservation_value": 0.50,
+            },
+            {
+                "name": "Employer",
+                "role": "Recruiter",
+                "persona": "Budget-conscious recruiter",
+                "weights": {"salary": 0.7, "vacation_days": 0.3},
+                "ideal_values": {"salary": 70000.0, "vacation_days": 15.0},
+                "reservation_value": 0.45,
+            },
+        ]
+
+        profiles, issues_meta, report = validate_and_update_scenario(
+            issues_data=issues_data,
+            profiles_data=profiles_data,
+            user_edited=True,
+        )
+
+        assert len(profiles) == 2
+        assert len(issues_meta) == 2
+        # All parties marked user_specified after editing
+        assert report.stakeholder_sources["Candidate"] == "user_specified"
+        assert report.stakeholder_sources["Employer"] == "user_specified"
+        # Token round-trip test with edited values
+        token = report.to_token()
+        rec_profiles, rec_issues = ParseReport.decode_token(token)
+        assert len(rec_profiles) == 2
+        assert rec_profiles[0].utility_function.ideal_values["salary"] == 140000.0
+
+    @patch("scenarios.from_text.structured_completion")
+    def test_pure_binary_issue_warning(self, mock_sc):
+        """Bug 6.4: Warning should be generated for pure binary yes/no issues."""
+        issues = [
+            _LLMIssue(name="ip_transfer", min_value=0.0, max_value=1.0, description="Binary yes/no IP transfer"),
+            _LLMIssue(name="price", min_value=10.0, max_value=100.0, description="Fee"),
+        ]
+        stakeholders = [
+            _LLMStakeholder(
+                name="PartyA", role="A", persona="",
+                weights={"ip_transfer": 0.5, "price": 0.5},
+                ideal_values={"ip_transfer": 1.0, "price": 100.0},
+                reservation_value=0.3, source="user_specified",
+            ),
+            _LLMStakeholder(
+                name="PartyB", role="B", persona="",
+                weights={"ip_transfer": 0.5, "price": 0.5},
+                ideal_values={"ip_transfer": 0.0, "price": 10.0},
+                reservation_value=0.3, source="llm_inferred",
+            ),
+        ]
+        mock_sc.return_value = _LLMScenarioResponse(issues=issues, stakeholders=stakeholders, warnings=[])
+
+        _, _, report = generate_from_description("Binary IP transfer negotiation.", seed=42)
+        assert any("pure binary flag" in w for w in report.warnings)
+
+    def test_compute_plain_language_summary(self):
+        """Bug 6.10: Summary must produce package text, party satisfaction, benchmarks, and explanation."""
+        from scenarios.from_text import compute_plain_language_summary
+        from src.models.utility import StakeholderProfile, UtilityFunction, Issue
+        from unittest.mock import MagicMock
+
+        issue = Issue(name="price", min_value=0.0, max_value=100.0, description="1=basic, 2=standard, 3=dedicated")
+        issues_meta = [{"name": "price", "range": [0.0, 100.0], "description": "1=basic, 2=standard, 3=dedicated"}]
+
+        p1 = StakeholderProfile(
+            name="Alice", role="Buyer", persona="",
+            utility_function=UtilityFunction(weights={"price": 1.0}, ideal_values={"price": 20.0}, issues=[issue]),
+            reservation_value=0.4,
+        )
+        p2 = StakeholderProfile(
+            name="Bob", role="Seller", persona="",
+            utility_function=UtilityFunction(weights={"price": 1.0}, ideal_values={"price": 80.0}, issues=[issue]),
+            reservation_value=0.4,
+        )
+
+        mock_outcome = MagicMock()
+        mock_outcome.agreement_reached = True
+        mock_outcome.final_proposal = {"price": 50.0}
+        mock_outcome.rounds_taken = 3
+
+        summary = compute_plain_language_summary(mock_outcome, [p1, p2], issues_meta)
+        assert summary["agreement_reached"] is True
+        assert "Price" in summary["package_plain_text"]
+        assert len(summary["party_outcomes"]) == 2
+        assert "distance_to_frontier" in summary
+        assert len(summary["explanation"].split(".")) >= 3
+
+
