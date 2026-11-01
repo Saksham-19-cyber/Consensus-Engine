@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import logging
 from contextlib import asynccontextmanager
 
@@ -21,7 +22,10 @@ logger = logging.getLogger("consensus_engine_api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
+    try:
+        await init_db()
+    except Exception as e:
+        logger.warning("Database initialization failed (SQLite disabled): %s", e)
     yield
 
 
@@ -32,13 +36,36 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+cors_env = os.environ.get("CORS_ORIGINS")
+if cors_env:
+    allowed_origins = [orig.strip() for orig in cors_env.split(",") if orig.strip()]
+else:
+    allowed_origins = [
+        "https://consensus-engine-opal.vercel.app",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _cors_headers(request: Request) -> dict[str, str]:
+    origin = request.headers.get("origin")
+    if origin:
+        if origin in allowed_origins or "*" in allowed_origins:
+            return {
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+            }
+        return {}
+    return {"Access-Control-Allow-Origin": "*"}
+
 
 # ── Exception handlers ensuring JSON {detail, error_type} and CORS headers ────
 
@@ -47,7 +74,7 @@ async def rate_limit_handler(request: Request, exc: RateLimitError):
     return JSONResponse(
         status_code=429,
         content={"detail": str(exc), "error_type": "rate_limit"},
-        headers={"Access-Control-Allow-Origin": "*"},
+        headers=_cors_headers(request),
     )
 
 
@@ -57,7 +84,7 @@ async def upstream_error_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=502,
         content={"detail": str(exc), "error_type": "upstream_error"},
-        headers={"Access-Control-Allow-Origin": "*"},
+        headers=_cors_headers(request),
     )
 
 
@@ -67,7 +94,7 @@ async def validation_error_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=422,
         content={"detail": str(exc), "error_type": "validation_error"},
-        headers={"Access-Control-Allow-Origin": "*"},
+        headers=_cors_headers(request),
     )
 
 
@@ -76,7 +103,7 @@ async def value_error_handler(request: Request, exc: ValueError):
     return JSONResponse(
         status_code=400,
         content={"detail": str(exc), "error_type": "value_error"},
-        headers={"Access-Control-Allow-Origin": "*"},
+        headers=_cors_headers(request),
     )
 
 
@@ -86,7 +113,7 @@ async def general_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": str(exc), "error_type": "internal_error"},
-        headers={"Access-Control-Allow-Origin": "*"},
+        headers=_cors_headers(request),
     )
 
 

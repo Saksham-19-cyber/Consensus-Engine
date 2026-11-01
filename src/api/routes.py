@@ -44,7 +44,7 @@ _IP_REQUEST_LOG: dict[str, list[float]] = defaultdict(list)
 _RATE_LIMIT_WINDOW = 60.0  # seconds
 _RATE_LIMIT_MAX_REQUESTS = 10  # max requests per window per IP
 MAX_ALLOWED_ROUNDS = 10
-MAX_ALLOWED_TRIALS = 5
+MAX_ALLOWED_TRIALS = 30
 
 
 def check_rate_limit(request: Request):

@@ -194,10 +194,10 @@ def test_endpoint_caps_and_rate_limiting(client):
     assert res_rounds.status_code == 400
     assert "max_rounds exceeds maximum" in res_rounds.json()["detail"]
 
-    # Test n_trials cap (> 5)
+    # Test n_trials cap (> 30)
     res_trials = client.post(
         "/api/eval/run",
-        json={"scenario": "roommate", "n_trials": 10},
+        json={"scenario": "roommate", "n_trials": 35},
     )
     assert res_trials.status_code == 400
     assert "n_trials exceeds maximum" in res_trials.json()["detail"]
