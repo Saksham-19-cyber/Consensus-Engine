@@ -157,3 +157,22 @@ def test_stakeholder_accept_reject():
     )
     assert profile.would_accept({"x": 0.5, "y": 0.5})
     assert not profile.would_accept({"x": 0.0, "y": 0.0})
+
+
+def test_pareto_metrics_near_frontier_and_legacy_compatibility():
+    from src.models.evaluation import ParetoMetrics
+
+    # Test setting near_frontier directly
+    m1 = ParetoMetrics(distance_to_frontier=0.03, near_frontier=True)
+    assert m1.near_frontier is True
+    assert m1.is_pareto_optimal is True
+
+    # Test legacy is_pareto_optimal input sets near_frontier
+    m2 = ParetoMetrics(distance_to_frontier=0.02, is_pareto_optimal=True)
+    assert m2.near_frontier is True
+    assert m2.is_pareto_optimal is True
+
+    # Test not near frontier
+    m3 = ParetoMetrics(distance_to_frontier=0.08, near_frontier=False)
+    assert m3.near_frontier is False
+    assert m3.is_pareto_optimal is False

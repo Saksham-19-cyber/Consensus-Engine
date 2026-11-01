@@ -7,8 +7,16 @@ class ParetoMetrics(BaseModel):
     distance_to_frontier: float = 0.0
     efficiency_ratio: float = 0.0  # Legacy alias for utilitarian_welfare_ratio
     utilitarian_welfare_ratio: float = 0.0
-    is_pareto_optimal: bool = False
+    near_frontier: bool = False  # True when distance_to_frontier < 0.05
+    is_pareto_optimal: bool = False  # Legacy alias for backwards compatibility
     social_welfare: float = 0.0
+
+    def __init__(self, **data):
+        if "near_frontier" in data and "is_pareto_optimal" not in data:
+            data["is_pareto_optimal"] = data["near_frontier"]
+        elif "is_pareto_optimal" in data and "near_frontier" not in data:
+            data["near_frontier"] = data["is_pareto_optimal"]
+        super().__init__(**data)
 
 
 class FairnessMetrics(BaseModel):

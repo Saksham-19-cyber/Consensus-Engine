@@ -161,13 +161,14 @@ def evaluate_outcome(
     frontier = compute_pareto_frontier(utility_functions, issues, resolution=resolution)
     dist = pareto_distance(outcome_u, frontier) if len(frontier) > 0 else float("inf")
     ratio = utilitarian_welfare_ratio(outcome_u, frontier) if len(frontier) > 0 else 0.0
-    is_optimal = dist < 0.05
+    near_frontier = dist < 0.05
 
     pareto = ParetoMetrics(
         distance_to_frontier=round(dist, 4),
         efficiency_ratio=round(ratio, 4),
         utilitarian_welfare_ratio=round(ratio, 4),
-        is_pareto_optimal=is_optimal,
+        near_frontier=near_frontier,
+        is_pareto_optimal=near_frontier,
         social_welfare=round(float(np.sum(outcome_u)), 4),
     )
 
