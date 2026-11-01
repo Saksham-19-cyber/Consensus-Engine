@@ -43,6 +43,7 @@ class PrivacyMetrics(BaseModel):
 class TrialResult(BaseModel):
     trial_id: int = 0
     scenario_name: str = ""
+    seed: int = 0
     method: str = ""
     protocol: str = "single_text"
     agreement_reached: bool = False
@@ -56,7 +57,10 @@ class TrialResult(BaseModel):
     # Per-agent honesty levels (empty for honest baselines)
     honesty_levels: dict[str, float] = Field(default_factory=dict)
     # Model configuration used for this trial
-    model_config_name: str = "70b_vs_8b"
+    model_config_name: str = "120b_vs_20b"
+    model_names: dict[str, str] = Field(default_factory=dict)
+    git_commit_hash: str = ""
+    timestamp: str = ""
     # Bluff detection scores (empty for non-mediated protocols)
     bluff_detection_scores: dict[str, dict[str, float]] = Field(default_factory=dict)
 

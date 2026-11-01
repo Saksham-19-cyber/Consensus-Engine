@@ -41,21 +41,47 @@ class TrialLogWriter:
         scenario_name: str,
         log_dir: Optional[Path] = None,
         tag: str = "",
+        filepath: Optional[Path] = None,
     ):
         self.scenario_name = scenario_name
-        log_dir = log_dir or (settings.data_dir / "logs")
-        log_dir.mkdir(parents=True, exist_ok=True)
+        if filepath is not None:
+            self.path = Path(filepath)
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            log_dir = log_dir or (settings.data_dir / "logs")
+            log_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            suffix = f"_{tag}" if tag else ""
+            filename = f"{scenario_name}{suffix}_{timestamp}.jsonl"
+            self.path = log_dir / filename
 
-        timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        suffix = f"_{tag}" if tag else ""
-        filename = f"{scenario_name}{suffix}_{timestamp}.jsonl"
-        self.path = log_dir / filename
         self._file = None
         self._count = 0
 
+    def get_completed_keys(self) -> set[tuple[str, str, int]]:
+        """Return set of (scenario_name, method, seed) tuples already in the log file."""
+        keys = set()
+        if not self.path.exists():
+            return keys
+        try:
+            with open(self.path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        keys.add((obj.get("scenario_name", ""), obj.get("method", ""), int(obj.get("seed", 0))))
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.warning("Error reading completed keys from %s: %s", self.path, e)
+        return keys
+
     def open(self):
-        self._file = open(self.path, "w", encoding="utf-8")
-        logger.info("trial log open: %s", self.path)
+        # Open in append mode so existing records are preserved on resume
+        self._file = open(self.path, "a", encoding="utf-8")
+        logger.info("trial log open (append mode): %s", self.path)
         return self
 
     def close(self):

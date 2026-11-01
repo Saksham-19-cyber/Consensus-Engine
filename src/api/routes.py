@@ -90,6 +90,8 @@ async def start_negotiation(req: NegotiateRequest):
             issues=issues,
             max_rounds=req.max_rounds,
             on_message=on_message,
+            scenario_name=scenario_name,
+            protocol=req.protocol,
         ),
     )
 
@@ -215,17 +217,44 @@ async def run_evaluation(req: EvalRequest):
 
     generator = make_scenario_generator(req.scenario, **kwargs)
 
+    def _execute():
+        from src.eval.runner import run_batch_baselines, run_batch_engine
+        from src.eval.log_writer import TrialLogWriter
+        results = []
+        writer = TrialLogWriter(scenario_name=req.scenario, tag=req.protocol)
+        writer.open()
+        try:
+            baseline_methods = [m for m in req.methods if m != "consensus_engine"]
+            if baseline_methods:
+                baselines = run_batch_baselines(
+                    scenario_generator=generator,
+                    methods=baseline_methods,
+                    n_trials=req.n_trials,
+                    scenario_name=req.scenario,
+                    seed=req.seed,
+                    model_config_name=req.model_config_name,
+                    log_writer=writer,
+                )
+                results.extend(baselines)
+
+            if "consensus_engine" in req.methods:
+                engines = run_batch_engine(
+                    scenario_generator=generator,
+                    n_trials=req.n_trials,
+                    scenario_name=req.scenario,
+                    seed=req.seed,
+                    protocol=req.protocol,
+                    model_config_name=req.model_config_name,
+                    run_privacy_probe=req.run_privacy_probe,
+                    log_writer=writer,
+                )
+                results.extend(engines)
+        finally:
+            writer.close()
+        return results
+
     loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(
-        None,
-        lambda: run_batch_baselines(
-            scenario_generator=generator,
-            methods=req.methods,
-            n_trials=req.n_trials,
-            scenario_name=req.scenario,
-            seed=req.seed,
-        ),
-    )
+    results = await loop.run_in_executor(None, _execute)
 
     summary = aggregate_results(results)
     report_md = generate_markdown_report(req.scenario, summary, results)
@@ -309,63 +338,17 @@ async def websocket_negotiate(websocket: WebSocket, session_id: str):
 async def get_eval_report(scenario: str):
     """Return the aggregated benchmark report and metrics for a scenario."""
     from src.config import settings
+    from src.eval.log_writer import load_trial_log
+    from src.eval.runner import aggregate_results
     log_dir = settings.data_dir / "logs"
-    matching = sorted(log_dir.glob(f"{scenario}*.jsonl"), reverse=True)
-    
-    # Pre-compiled benchmark summary for business_deal
-    if scenario == "business_deal":
-        summary = {
-            "consensus_engine": {
-                "agreement_rate": 1.0,
-                "mean_pareto_ratio": 0.918,
-                "ci95_pareto_ratio": [0.892, 0.938],
-                "mean_nash_welfare": 0.364,
-                "ci95_nash_welfare": [0.305, 0.418],
-                "mean_min_utility": 0.605,
-                "mean_gini": 0.078,
-                "mean_rounds": 2.0,
-                "wilcoxon_pareto_vs_engine": None,
-                "wilcoxon_nash_vs_engine": None,
-            },
-            "public_midpoint": {
-                "agreement_rate": 1.0,
-                "mean_pareto_ratio": 0.908,
-                "ci95_pareto_ratio": [0.895, 0.920],
-                "mean_nash_welfare": 0.389,
-                "ci95_nash_welfare": [0.374, 0.402],
-                "mean_min_utility": 0.618,
-                "mean_gini": 0.072,
-                "mean_rounds": 0.0,
-                "wilcoxon_pareto_vs_engine": {"p_value": 0.281, "significant": False},
-                "wilcoxon_nash_vs_engine": {"p_value": 0.312, "significant": False},
-            },
-            "private_ideal_average": {
-                "agreement_rate": 1.0,
-                "mean_pareto_ratio": 0.953,
-                "ci95_pareto_ratio": [0.943, 0.961],
-                "mean_nash_welfare": 0.453,
-                "ci95_nash_welfare": [0.434, 0.472],
-                "mean_min_utility": 0.686,
-                "mean_gini": 0.064,
-                "mean_rounds": 0.0,
-                "wilcoxon_pareto_vs_engine": {"p_value": 0.004, "significant": True},
-                "wilcoxon_nash_vs_engine": {"p_value": 0.002, "significant": True},
-            },
-            "nash_bargaining": {
-                "agreement_rate": 1.0,
-                "mean_pareto_ratio": 0.998,
-                "ci95_pareto_ratio": [0.996, 0.999],
-                "mean_nash_welfare": 0.528,
-                "ci95_nash_welfare": [0.503, 0.554],
-                "mean_min_utility": 0.741,
-                "mean_gini": 0.050,
-                "mean_rounds": 0.0,
-                "wilcoxon_pareto_vs_engine": {"p_value": 0.000002, "significant": True},
-                "wilcoxon_nash_vs_engine": {"p_value": 0.000001, "significant": True},
-            },
-        }
-        report_md = generate_markdown_report(scenario, summary, [])
-        return {"scenario": scenario, "summary": summary, "report_markdown": report_md}
+    if log_dir.exists():
+        matching = sorted(log_dir.glob(f"{scenario}*.jsonl"), reverse=True)
+        if matching:
+            results = load_trial_log(matching[0])
+            if results:
+                summary = aggregate_results(results)
+                report_md = generate_markdown_report(scenario, summary, results)
+                return {"scenario": scenario, "summary": summary, "report_markdown": report_md, "source_log": matching[0].name}
 
     return {"scenario": scenario, "summary": {}, "report_markdown": f"No benchmark run found for {scenario}"}
 

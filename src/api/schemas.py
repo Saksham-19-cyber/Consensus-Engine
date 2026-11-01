@@ -1,23 +1,32 @@
 from __future__ import annotations
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class NegotiateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     scenario: str = "roommate"
     n_agents: int = Field(default=2, ge=2, le=5)
     max_rounds: int = Field(default=10, ge=1, le=30)
     seed: int = 42
+    protocol: str = Field(default="single_text", description="Protocol: 'single_text' or 'alternating_offers'")
+    model_config_name: str = Field(default="120b_vs_20b", alias="model_config", description="Model configuration preset")
     # Free-form mode: when present, overrides `scenario` with pre-parsed data.
     # This is the opaque token returned by POST /api/scenario/parse.
     parsed_scenario_token: str | None = None
 
 
 class EvalRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     scenario: str = "roommate"
     n_trials: int = Field(default=10, ge=1, le=500)
-    methods: list[str] = Field(default_factory=lambda: ["naive_average", "nash_bargaining"])
+    methods: list[str] = Field(default_factory=lambda: ["naive_average", "nash_bargaining", "consensus_engine"])
     seed: int = 42
     n_agents: int = Field(default=2, ge=2, le=5)
+    model_config_name: str = Field(default="120b_vs_20b", alias="model_config", description="Model configuration preset")
+    protocol: str = Field(default="single_text", description="Protocol: 'single_text' or 'alternating_offers'")
+    run_privacy_probe: bool = Field(default=False, description="Run post-hoc privacy leakage probe")
 
 
 class SessionResponse(BaseModel):
