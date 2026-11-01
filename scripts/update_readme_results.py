@@ -2,8 +2,8 @@
 scripts/update_readme_results.py
 ================================
 Reads tracked result logs from results/ (fallback to data/logs/) and rewrites
-tables between <!-- RESULTS:START name --> and <!-- RESULTS:END name --> markers
-in README.md and RESULTS.md.
+tables and sample records between <!-- RESULTS:START name --> and <!-- RESULTS:END name -->
+markers in README.md and RESULTS.md.
 
 Ensures empirical tables cannot drift from actual logs on disk.
 Supports --check flag for CI / verification (fails if file content differs from generated).
@@ -61,15 +61,24 @@ def generate_stage_a_table() -> str:
     results = load_trial_log(log_file)
     summary = aggregate_results(results, engine_method="consensus_engine")
 
-    # Order: consensus_engine first, then others alphabetically
+    # Drop duplicate alias private_ideal_average when naive_average is present
+    filtered_methods = [
+        m for m in summary.keys()
+        if not (m == "private_ideal_average" and "naive_average" in summary)
+    ]
+
+    # Order: consensus_engine first, then others sorted
     ordered_methods = ["consensus_engine"] + sorted(
-        [m for m in summary.keys() if m != "consensus_engine"]
+        [m for m in filtered_methods if m != "consensus_engine"]
     )
 
     lines = [
-        "| Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Wilcoxon vs Engine |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Wilcoxon vs Engine | vs Engine |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
+
+    engine_summary = summary.get("consensus_engine", {})
+    engine_dist = engine_summary.get("mean_distance_to_frontier", 0.0)
 
     for m in ordered_methods:
         if m not in summary:
@@ -96,8 +105,21 @@ def generate_stage_a_table() -> str:
         wilcoxon = s.get("wilcoxon_pareto_vs_engine")
         w_str = format_p_val(wilcoxon) if m != "consensus_engine" else "*(Engine)*"
 
+        # Determine vs engine column from distance difference sign and significance
+        if m == "consensus_engine":
+            vs_engine = "—"
+        else:
+            p_val = wilcoxon.get("p_value") if wilcoxon else None
+            is_sig = p_val is not None and p_val < 0.05
+            if not is_sig:
+                vs_engine = "n.s."
+            elif dist_mean < engine_dist:
+                vs_engine = "better"
+            else:
+                vs_engine = "worse"
+
         lines.append(
-            f"| `{m}` | {agree_pct} | {dist_str} | {nash_str} | {util_str} | {min_u} | {gini} | {rounds} | {w_str} |"
+            f"| `{m}` | {agree_pct} | {dist_str} | {nash_str} | {util_str} | {min_u} | {gini} | {rounds} | {w_str} | {vs_engine} |"
         )
 
     return "\n".join(lines)
@@ -122,32 +144,34 @@ def generate_reservation_sweep_table() -> str:
                         pass
 
     # Baseline data: deterministic arithmetic across N=100
+    # mid_fail, naive_br
     baseline_stats = [
-        (0.40, 0.0, 0.0, 0.0),
-        (0.55, 4.0, 4.0, 0.0),
-        (0.60, 33.0, 33.0, 1.0),
-        (0.65, 78.0, 78.0, 24.0),
-        (0.70, 100.0, 100.0, 67.0),
+        (0.40, 0.0, 0.0),
+        (0.55, 4.0, 0.0),
+        (0.60, 33.0, 1.0),
+        (0.65, 78.0, 24.0),
+        (0.70, 100.0, 67.0),
     ]
 
     breach_note = "0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`)"
 
     lines = [
-        "| Reservation ($r$) | Midpoint Failure% ($N=100$) | Midpoint Breach% ($N=100$) | Naive Breach% ($N=100$) | Engine Agreement Rate | Engine Involuntary Breach Rate |",
+        "| Reservation ($r$) | Midpoint Failure% ($N=100$) | IR-gated Midpoint Agree% ($N=100$) | Naive Breach% ($N=100$) | Engine Agreement Rate | Engine Involuntary Breach Rate |",
         "|---|---|---|---|---|---|",
     ]
 
-    for r_val, mid_fail, mid_br, naive_br in baseline_stats:
+    for r_val, mid_fail, naive_br in baseline_stats:
+        ir_gated_agree = f"{100.0 - mid_fail:.1f}%"
         if r_val in engine_trials_by_r:
             trials = engine_trials_by_r[r_val]
             n_tot = len(trials)
             n_agr = sum(1 for t in trials if t.get("agreement_reached"))
             rate_str = f"{(n_agr / n_tot) * 100.0:.1f}% ({n_agr}/{n_tot} trials)"
         else:
-            rate_str = "*not yet run (resume with `make benchmarks`)*"
+            rate_str = "*not yet run (resume with `python scripts/sweep_anchor_and_reservation.py`)*"
 
         lines.append(
-            f"| $r = {r_val:.2f}$ | {mid_fail:.1f}% | {mid_br:.1f}% | {naive_br:.1f}% | {rate_str} | {breach_note} |"
+            f"| $r = {r_val:.2f}$ | {mid_fail:.1f}% | {ir_gated_agree} | {naive_br:.1f}% | {rate_str} | {breach_note} |"
         )
 
     return "\n".join(lines)
@@ -178,10 +202,35 @@ def generate_anchor_sweep_table() -> str:
     return "\n".join(lines)
 
 
+def generate_sample_record() -> str:
+    log_file = find_log_file("benchmark_business_deal.jsonl")
+    if not log_file:
+        return "*Log file benchmark_business_deal.jsonl not found.*"
+
+    sample_line = None
+    with open(log_file, "r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+                if rec.get("method") == "consensus_engine" and rec.get("seed") == 42:
+                    sample_line = line.strip()
+                    break
+            except Exception:
+                pass
+
+    if not sample_line:
+        return "*Sample record for method=consensus_engine, seed=42 not found.*"
+
+    return f"```json\n{sample_line}\n```"
+
+
 GENERATORS = {
     "stage_a_table": generate_stage_a_table,
     "reservation_sweep_table": generate_reservation_sweep_table,
     "anchor_sweep_table": generate_anchor_sweep_table,
+    "sample_record": generate_sample_record,
 }
 
 

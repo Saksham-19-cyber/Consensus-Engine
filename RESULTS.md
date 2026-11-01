@@ -22,14 +22,13 @@ python -m src.eval.runner --scenario business_deal --n_trials 30 --protocol sing
 ```
 
 <!-- RESULTS:START stage_a_table -->
-| Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Wilcoxon vs Engine |
-|---|---|---|---|---|---|---|---|---|
-| `consensus_engine` | 100.0% | 0.0654 [0.0544, 0.0780] | 0.3990 [0.3811, 0.4179] | 0.9156 [0.9022, 0.9274] | 0.6266 | 0.0753 | 1.0 | *(Engine)* |
-| `naive_average` | 100.0% | 0.0362 [0.0288, 0.0441] | 0.4532 [0.4342, 0.4723] | 0.9525 [0.9425, 0.9612] | 0.6843 | 0.0651 | 0.0 | p = <1e-6 ** |
-| `nash_bargaining` | 100.0% | 0.0350 [0.0310, 0.0391] | 0.5481 [0.5202, 0.5757] | 0.9991 [0.9977, 0.9999] | 0.7368 | 0.0504 | 0.0 | p = <1e-6 ** |
-| `private_ideal_average` | 100.0% | 0.0362 [0.0288, 0.0441] | 0.4532 [0.4342, 0.4723] | 0.9525 [0.9425, 0.9612] | 0.6843 | 0.0651 | 0.0 | p = <1e-6 ** |
-| `public_midpoint` | 100.0% | 0.0725 [0.0612, 0.0849] | 0.3885 [0.3744, 0.4019] | 0.9082 [0.8952, 0.9203] | 0.6193 | 0.0748 | 0.0 | p = 0.0017 ** |
-| `random_uniform` | 96.7% | 0.1610 [0.1281, 0.1973] | 0.2887 [0.2594, 0.3207] | 0.8205 [0.7912, 0.8480] | 0.5390 | 0.0826 | 0.0 | p = <1e-6 ** |
+| Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Wilcoxon vs Engine | vs Engine |
+|---|---|---|---|---|---|---|---|---|---|
+| `consensus_engine` | 100.0% | 0.0654 [0.0544, 0.0780] | 0.3990 [0.3811, 0.4179] | 0.9156 [0.9022, 0.9274] | 0.6266 | 0.0753 | 1.0 | *(Engine)* | — |
+| `naive_average` | 100.0% | 0.0362 [0.0288, 0.0441] | 0.4532 [0.4342, 0.4723] | 0.9525 [0.9425, 0.9612] | 0.6843 | 0.0651 | 0.0 | p = <1e-6 ** | better |
+| `nash_bargaining` | 100.0% | 0.0350 [0.0310, 0.0391] | 0.5481 [0.5202, 0.5757] | 0.9991 [0.9977, 0.9999] | 0.7368 | 0.0504 | 0.0 | p = <1e-6 ** | better |
+| `public_midpoint` | 100.0% | 0.0725 [0.0612, 0.0849] | 0.3885 [0.3744, 0.4019] | 0.9082 [0.8952, 0.9203] | 0.6193 | 0.0748 | 0.0 | p = 0.0017 ** | worse |
+| `random_uniform` | 96.7% | 0.1610 [0.1281, 0.1973] | 0.2887 [0.2594, 0.3207] | 0.8205 [0.7912, 0.8480] | 0.5390 | 0.0826 | 0.0 | p = <1e-6 ** | worse |
 <!-- RESULTS:END stage_a_table -->
 
 ## Stage b: Protocol Comparison (single_text vs alternating_offers)
@@ -61,13 +60,13 @@ python scripts/sweep_anchor_and_reservation.py --n_engine 30 --n_baselines 100 -
 > **Definition of Breach**: An outcome where an agreement was reached, but at least one agent's *true* utility fell below its reservation value.
 
 <!-- RESULTS:START reservation_sweep_table -->
-| Reservation ($r$) | Midpoint Failure% ($N=100$) | Midpoint Breach% ($N=100$) | Naive Breach% ($N=100$) | Engine Agreement Rate | Engine Involuntary Breach Rate |
+| Reservation ($r$) | Midpoint Failure% ($N=100$) | IR-gated Midpoint Agree% ($N=100$) | Naive Breach% ($N=100$) | Engine Agreement Rate | Engine Involuntary Breach Rate |
 |---|---|---|---|---|---|
-| $r = 0.40$ | 0.0% | 0.0% | 0.0% | 100.0% (2/2 trials) | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
-| $r = 0.55$ | 4.0% | 4.0% | 0.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
-| $r = 0.60$ | 33.0% | 33.0% | 1.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
-| $r = 0.65$ | 78.0% | 78.0% | 24.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
-| $r = 0.70$ | 100.0% | 100.0% | 67.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.40$ | 0.0% | 100.0% | 0.0% | 100.0% (2/2 trials) | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.55$ | 4.0% | 96.0% | 0.0% | *not yet run (resume with `python scripts/sweep_anchor_and_reservation.py`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.60$ | 33.0% | 67.0% | 1.0% | *not yet run (resume with `python scripts/sweep_anchor_and_reservation.py`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.65$ | 78.0% | 22.0% | 24.0% | *not yet run (resume with `python scripts/sweep_anchor_and_reservation.py`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.70$ | 100.0% | 0.0% | 67.0% | *not yet run (resume with `python scripts/sweep_anchor_and_reservation.py`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
 <!-- RESULTS:END reservation_sweep_table -->
 
 ### Strategic Anchor Inflation Sweep
