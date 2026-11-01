@@ -46,7 +46,7 @@ export default function Home() {
             Consensus Engine &middot; Autonomous Multi-Agent Negotiation Under Private Information
           </p>
           <div className="flex items-center space-x-4">
-            <span className="text-zinc-600">Frontend on Vercel &middot; Backend on Render/Fly</span>
+            <span className="text-zinc-600">Deployed on Vercel</span>
             <a
               href="https://github.com/Saksham-19-cyber/Consensus-Engine"
               target="_blank"

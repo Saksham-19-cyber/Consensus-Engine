@@ -256,10 +256,12 @@ export const NegotiationRunner: React.FC = () => {
                     </p>
                   </div>
                 ))}
-              {outcome.pareto?.efficiency_ratio != null && (
+              {(outcome.pareto?.utilitarian_welfare_ratio ?? outcome.pareto?.efficiency_ratio) != null && (
                 <div className="border-l border-zinc-800 pl-3 text-center">
                   <p className="text-zinc-500 text-[10px] uppercase">Welfare Ratio</p>
-                  <p className="text-sm font-bold text-teal-300">{Number(outcome.pareto.efficiency_ratio).toFixed(3)}</p>
+                  <p className="text-sm font-bold text-teal-300">
+                    {Number(outcome.pareto.utilitarian_welfare_ratio ?? outcome.pareto.efficiency_ratio).toFixed(3)}
+                  </p>
                 </div>
               )}
             </div>

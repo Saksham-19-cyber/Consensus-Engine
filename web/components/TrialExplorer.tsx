@@ -223,6 +223,12 @@ export const TrialExplorer: React.FC = () => {
                         <span>Bluffing Flagged</span>
                       </span>
                     )}
+
+                    {(r.near_frontier ?? r.is_pareto_optimal) && (
+                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800/40">
+                        <span>Near Frontier</span>
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -230,7 +236,7 @@ export const TrialExplorer: React.FC = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 text-xs font-mono">
                   <div>
                     <p className="text-zinc-500 text-[10px] uppercase">Welfare Ratio</p>
-                    <p className="text-emerald-400 font-bold">{r.pareto_efficiency_ratio?.toFixed(3) ?? '—'}</p>
+                    <p className="text-emerald-400 font-bold">{(r.utilitarian_welfare_ratio ?? r.pareto_efficiency_ratio)?.toFixed(3) ?? '—'}</p>
                   </div>
                   <div>
                     <p className="text-zinc-500 text-[10px] uppercase">Nash Welfare</p>

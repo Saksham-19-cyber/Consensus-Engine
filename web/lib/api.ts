@@ -82,11 +82,14 @@ export interface TrialRecord {
   rounds_taken?: number;
   agreement_reached?: boolean;
   pareto_efficiency_ratio?: number;
+  utilitarian_welfare_ratio?: number;
   nash_social_welfare?: number;
   min_utility?: number;
   gini_coefficient?: number;
   proposal?: Record<string, number>;
   utilities?: Record<string, number>;
+  near_frontier?: boolean;
+  is_pareto_optimal?: boolean;
   bluff_suspected?: boolean;
   messages?: Array<{ round: number; agent: string; content: string }>;
 }
