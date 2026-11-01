@@ -105,11 +105,20 @@ class StrategicNegotiationScenario(Scenario):
             "payment_terms": 60.0 + rng.uniform(0, 30),
             "quality_tier": 4.0 + rng.uniform(0, 1),
         }
-        buyer_bias = make_strategic_bias(
+        delivery_bias = make_strategic_bias(
             buyer_ideals, buyer_honesty, rng,
-            inflate_issues=["delivery_days", "quality_tier"],
-            inflate_direction="lower",   # buyer inflates demand downward (wants faster/better)
+            inflate_issues=["delivery_days"],
+            inflate_direction="lower",   # buyer inflates delivery days downward (wants faster delivery)
         )
+        quality_bias = make_strategic_bias(
+            buyer_ideals, buyer_honesty, rng,
+            inflate_issues=["quality_tier"],
+            inflate_direction="higher",  # buyer inflates quality demand HIGHER (wants higher quality tier)
+        )
+        buyer_bias = {
+            issue_name: delivery_bias.get(issue_name, 0.0) + quality_bias.get(issue_name, 0.0)
+            for issue_name in issue_names
+        }
         buyer = StakeholderProfile(
             name="BuyerInc",
             role="Buyer",

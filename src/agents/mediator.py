@@ -18,9 +18,10 @@ _BLUFF_HISTORY_WINDOW = 3   # number of rounds to look back
 
 
 class MediatorAgent:
-    def __init__(self, agent_names: list[str], issues: list[dict]):
+    def __init__(self, agent_names: list[str], issues: list[dict], max_rounds: int | None = None):
         self.agent_names = agent_names
         self.issues = issues
+        self.max_rounds = max_rounds or settings.max_rounds
         self.concession_history: dict[str, list[float]] = {n: [] for n in agent_names}
         self.round_number = 0
         # Rolling history of (satisfaction, concession_willingness) per agent for bluff detection
@@ -29,8 +30,10 @@ class MediatorAgent:
     def propose_initial(
         self,
         scenario_name: str | None = None,
+        max_rounds: int | None = None,
     ) -> MediatorResponse:
         self.round_number = 1
+        effective_max_rounds = max_rounds or self.max_rounds
 
         # Component 6: fetch precedents from ChromaDB if available
         precedents: list[dict] = []
@@ -52,7 +55,7 @@ class MediatorAgent:
             agent_names=self.agent_names,
             issues=self.issues,
             round_number=1,
-            max_rounds=settings.max_rounds,
+            max_rounds=effective_max_rounds,
         )
 
         user_prompt = build_mediator_initial_prompt(self.issues, precedents=precedents or None)
@@ -91,8 +94,10 @@ class MediatorAgent:
         critiques: list[Critique],
         current_proposal: dict[str, float],
         round_number: int,
+        max_rounds: int | None = None,
     ) -> MediatorResponse:
         self.round_number = round_number
+        effective_max_rounds = max_rounds or self.max_rounds
 
         for c in critiques:
             name = c.agent_name
@@ -134,7 +139,7 @@ class MediatorAgent:
             agent_names=self.agent_names,
             issues=self.issues,
             round_number=round_number,
-            max_rounds=settings.max_rounds,
+            max_rounds=effective_max_rounds,
         )
 
         critique_dicts = [

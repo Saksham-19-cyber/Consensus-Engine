@@ -248,9 +248,7 @@ def run_alternating_offers(
             )
 
         # All responders + the proposer's acceptance of the proposal
-        all_accepted = len(accepts) == len(responders) and (
-            proposer_accepts_current or len(responders) == len(profiles) - 1
-        )
+        all_accepted = len(accepts) == len(responders) and proposer_accepts_current
         if all_accepted:
             logger.info("ao_protocol: agreement at round %d", round_num)
             per_agent = {n: agents[n].evaluate_proposal(current_proposal) for n in agents}
@@ -276,12 +274,14 @@ def run_alternating_offers(
                     avg[issue_name] = current_proposal[issue_name]
             current_proposal = _clamp(avg)
 
-            # Rotate proposer to the agent whose counter was chosen (last one for simplicity)
-            first_offerer_name = responders[-1]
-            logger.info(
-                "ao_protocol round=%d new_proposal=%s new_proposer=%s",
-                round_num, current_proposal, first_offerer_name,
-            )
+        # Rotate proposer round-robin across all agents
+        agent_names = list(agents.keys())
+        current_idx = agent_names.index(first_offerer_name)
+        first_offerer_name = agent_names[(current_idx + 1) % len(agent_names)]
+        logger.info(
+            "ao_protocol round=%d new_proposal=%s new_proposer=%s",
+            round_num, current_proposal, first_offerer_name,
+        )
 
     # Max rounds reached
     logger.info("ao_protocol: max_rounds reached, impasse")

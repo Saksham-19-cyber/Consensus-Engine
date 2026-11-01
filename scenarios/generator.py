@@ -5,6 +5,7 @@ from scenarios.base import Scenario
 from scenarios.roommate import RoommateScenario
 from scenarios.business_deal import BusinessDealScenario
 from scenarios.trip_planning import TripPlanningScenario
+from scenarios.strategic_negotiation import StrategicNegotiationScenario
 from src.models.utility import StakeholderProfile
 
 
@@ -12,6 +13,7 @@ SCENARIO_REGISTRY: dict[str, Type[Scenario]] = {
     "roommate": RoommateScenario,
     "business_deal": BusinessDealScenario,
     "trip_planning": TripPlanningScenario,
+    "strategic_negotiation": StrategicNegotiationScenario,
 }
 
 

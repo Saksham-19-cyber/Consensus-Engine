@@ -42,7 +42,7 @@ def build_negotiation_graph(
     agent_names = [p.name for p in profiles]
 
     stakeholder_agents = {p.name: _make_stakeholder_agent(p) for p in profiles}
-    mediator = MediatorAgent(agent_names, issues)
+    mediator = MediatorAgent(agent_names, issues, max_rounds=rules.max_rounds)
 
     def emit(msg: NegotiationMessage):
         if on_message:
@@ -53,7 +53,10 @@ def build_negotiation_graph(
         critiques_raw = state.get("critiques", [])
 
         if round_num == 0:
-            response = mediator.propose_initial(scenario_name=scenario_name)
+            response = mediator.propose_initial(
+                scenario_name=scenario_name,
+                max_rounds=state.get("max_rounds"),
+            )
             emit(NegotiationMessage(
                 role="mediator",
                 agent_name="Mediator",
@@ -84,19 +87,24 @@ def build_negotiation_graph(
                 critiques=critique_objects,
                 current_proposal=state["current_proposal"],
                 round_number=round_num + 1,
+                max_rounds=state.get("max_rounds"),
             )
 
-            new_status = "in_progress"
             if response.action == MediatorAction.DECLARE_AGREEMENT:
                 new_status = "agreed"
+                effective_round = round_num
             elif response.action == MediatorAction.DECLARE_IMPASSE:
                 new_status = "impasse"
+                effective_round = round_num
+            else:
+                new_status = "in_progress"
+                effective_round = round_num + 1
 
             emit(NegotiationMessage(
                 role="mediator",
                 agent_name="Mediator",
-                content=f"Round {round_num + 1} - {response.action.value}: {response.revised_proposal}",
-                round_number=round_num + 1,
+                content=f"Round {effective_round} - {response.action.value}: {response.revised_proposal}",
+                round_number=effective_round,
                 message_type=response.action.value,
                 metadata={
                     "proposal": response.revised_proposal,
@@ -108,12 +116,12 @@ def build_negotiation_graph(
             ))
 
             return {
-                "round_number": round_num + 1,
+                "round_number": effective_round,
                 "current_proposal": response.revised_proposal,
                 "status": new_status,
                 "critiques": [],
                 "history": [{
-                    "round": round_num + 1,
+                    "round": effective_round,
                     "type": response.action.value,
                     "agent": "Mediator",
                     "proposal": response.revised_proposal,
@@ -215,6 +223,12 @@ def build_negotiation_graph(
             }
         return {}
 
+    def route_after_propose(state: NegotiationState) -> Literal["check_termination", "stakeholder_critique"]:
+        status = state.get("status", "in_progress")
+        if status in ("agreed", "impasse"):
+            return "check_termination"
+        return "stakeholder_critique"
+
     def route_after_critique(state: NegotiationState) -> Literal["check_termination", "mediator_propose"]:
         return "check_termination"
 
@@ -231,7 +245,14 @@ def build_negotiation_graph(
     builder.add_node("check_termination", check_termination)
 
     builder.add_edge(START, "mediator_propose")
-    builder.add_edge("mediator_propose", "stakeholder_critique")
+    builder.add_conditional_edges(
+        "mediator_propose",
+        route_after_propose,
+        {
+            "check_termination": "check_termination",
+            "stakeholder_critique": "stakeholder_critique",
+        },
+    )
     builder.add_conditional_edges("stakeholder_critique", route_after_critique)
     builder.add_conditional_edges("check_termination", route_after_check)
 
