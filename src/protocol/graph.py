@@ -44,7 +44,10 @@ def build_negotiation_graph(
     stakeholder_agents = {p.name: _make_stakeholder_agent(p) for p in profiles}
     mediator = MediatorAgent(agent_names, issues, max_rounds=rules.max_rounds)
 
+    emitted_messages: list[NegotiationMessage] = []
+
     def emit(msg: NegotiationMessage):
+        emitted_messages.append(msg)
         if on_message:
             on_message(msg)
 
@@ -213,6 +216,7 @@ def build_negotiation_graph(
                 status=status,
                 rounds_taken=state["round_number"],
                 agreement_reached=agreement_reached,
+                messages=list(emitted_messages),
                 protocol_used="single_text",
                 bluff_detection_scores=mediator.get_bluff_detection_scores(),
             )
@@ -267,6 +271,7 @@ def run_negotiation(
     on_message: callable | None = None,
     scenario_name: str | None = None,
     protocol: str = "single_text",
+    model_config: str | None = None,
 ) -> NegotiationOutcome:
     """
     Run a negotiation session.
@@ -278,7 +283,12 @@ def run_negotiation(
         on_message: Callback for real-time message streaming
         scenario_name: Used for ChromaDB precedent lookup and outcome storage
         protocol: "single_text" (mediated) or "alternating_offers" (direct)
+        model_config: Model preset to apply for this negotiation run
     """
+    if model_config:
+        from src.eval.runner import _apply_model_config
+        _apply_model_config(model_config)
+
     if protocol == "alternating_offers":
         from src.protocol.alternating_offers import run_alternating_offers
         outcome = run_alternating_offers(
@@ -316,6 +326,8 @@ def run_negotiation(
 
         if final_state.get("outcome"):
             outcome = NegotiationOutcome(**final_state["outcome"])
+            if not outcome.messages and emitted_messages:
+                outcome.messages = list(emitted_messages)
         else:
             proposal = final_state.get("current_proposal", {})
             per_agent_utilities = {}
@@ -328,6 +340,7 @@ def run_negotiation(
                 status=NegotiationStatus.MAX_ROUNDS,
                 rounds_taken=final_state.get("round_number", 0),
                 agreement_reached=False,
+                messages=list(emitted_messages),
                 protocol_used=protocol,
             )
 

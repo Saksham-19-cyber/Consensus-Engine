@@ -19,6 +19,18 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 _client: Groq | None = None
+TOTAL_CALLS: int = 0
+
+
+def get_total_calls() -> int:
+    return TOTAL_CALLS
+
+
+def reset_total_calls() -> int:
+    global TOTAL_CALLS
+    old = TOTAL_CALLS
+    TOTAL_CALLS = 0
+    return old
 
 
 def get_client() -> Groq:
@@ -73,8 +85,8 @@ def _pydantic_to_json_schema(model_class: Type[BaseModel]) -> dict:
 
 @retry(
     retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
-    wait=wait_exponential(multiplier=2, min=2, max=30),
-    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=3, max=60),
+    stop=stop_after_attempt(8),
 )
 def _call_groq(
     messages: list[dict],
@@ -93,7 +105,10 @@ def _call_groq(
     if response_format:
         kwargs["response_format"] = response_format
 
+    time.sleep(0.5)
     start = time.time()
+    global TOTAL_CALLS
+    TOTAL_CALLS += 1
     completion = client.chat.completions.create(**kwargs)
     elapsed = time.time() - start
 

@@ -32,7 +32,7 @@ from src.eval.pareto import (
 )
 from src.eval.fairness import compute_fairness_metrics
 from src.eval.baselines import compute_baseline
-from src.eval.log_writer import TrialLogWriter
+from src.eval.log_writer import TrialLogWriter, load_trial_log
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -192,15 +192,17 @@ def run_baseline_trial(
     scenario_name: str,
     seed: int = 0,
     model_config_name: str = "120b_vs_20b",
+    model_config: str | None = None,
     git_commit_hash: str | None = None,
 ) -> TrialResult:
+    effective_config = model_config or model_config_name
     proposal = compute_baseline(method, profiles, issues)
     pareto, fairness, per_agent = evaluate_outcome(proposal, profiles, issues)
     all_accept = all(p.would_accept(proposal) for p in profiles)
     commit_hash = git_commit_hash or get_git_commit_hash()
     timestamp = datetime.now(timezone.utc).isoformat()
     models = MODEL_CONFIGS.get(
-        model_config_name,
+        effective_config,
         {"negotiator_model": settings.negotiator_model, "mediator_model": settings.mediator_model},
     )
 
@@ -232,10 +234,12 @@ def run_engine_trial(
     seed: int = 0,
     protocol: str = "single_text",
     model_config_name: str = "120b_vs_20b",
+    model_config: str | None = None,
     run_privacy_probe: bool = False,
     git_commit_hash: str | None = None,
 ) -> TrialResult:
-    _apply_model_config(model_config_name)
+    effective_config = model_config or model_config_name
+    _apply_model_config(effective_config)
     from src.protocol.graph import run_negotiation
     # IMPORTANT: Do NOT pass scenario_name during benchmarks, so ChromaDB precedents don't contaminate independent trials
     outcome = run_negotiation(

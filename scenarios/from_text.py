@@ -622,6 +622,35 @@ def compute_plain_language_summary(
     }
 
 
+def run_custom_scenario(
+    description: str,
+    seed: int = 42,
+    max_rounds: int = 5,
+    protocol: str = "single_text",
+    model_config: str | None = None,
+) -> dict:
+    """End-to-end runner for custom scenario description."""
+    from src.protocol.graph import run_negotiation
+    profiles, issues_meta, report = generate_from_description(description, seed=seed)
+    outcome = run_negotiation(
+        profiles=profiles,
+        issues=issues_meta,
+        max_rounds=max_rounds,
+        scenario_name=None,
+        model_config=model_config,
+        protocol=protocol,
+    )
+    summary = compute_plain_language_summary(outcome, profiles, issues_meta, report)
+    return {
+        "profiles": profiles,
+        "issues": issues_meta,
+        "report": report,
+        "outcome": outcome,
+        "summary": summary,
+        "feasible": report.is_feasible,
+    }
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # CLI execution (Bug 6.12)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -635,7 +664,7 @@ if __name__ == "__main__":
     parser.add_argument("--file", type=str, default="", help="Path to description text file")
     parser.add_argument("--rounds", type=int, default=5, help="Max negotiation rounds")
     parser.add_argument("--protocol", type=str, default="single_text", help="Protocol: single_text or alternating_offers")
-    parser.add_argument("--model_config", type=str, default="fast", help="Model configuration name")
+    parser.add_argument("--model_config", type=str, default="120b_vs_20b", help="Model configuration name")
     parser.add_argument("--output_dir", type=str, default="data/logs", help="Directory to save custom trial output")
 
     args = parser.parse_args()

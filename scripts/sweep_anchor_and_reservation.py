@@ -28,7 +28,7 @@ logger = logging.getLogger("sweep_runner")
 def run_reservation_sweep(
     n_engine: int = 30,
     n_baselines: int = 100,
-    model_config: str = "fast",
+    model_config: str = "20b_vs_20b",
     log_dir: str = "data/logs",
     run_engine: bool = True,
 ) -> dict:
@@ -151,7 +151,7 @@ def run_reservation_sweep(
 def run_anchor_sweep(
     n_engine: int = 30,
     n_baselines: int = 100,
-    model_config: str = "fast",
+    model_config: str = "20b_vs_20b",
     log_dir: str = "data/logs",
     run_engine: bool = True,
 ) -> dict:

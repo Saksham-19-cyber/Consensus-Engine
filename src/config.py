@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     groq_api_key: str = ""
-    negotiator_model: str = "openai/gpt-oss-120b"
+    negotiator_model: str = "openai/gpt-oss-20b"
     mediator_model: str = "openai/gpt-oss-20b"
     max_rounds: int = 10
     max_retries: int = 3

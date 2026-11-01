@@ -151,7 +151,10 @@ def compute_baseline(
         return naive_average_baseline(profiles, issues)
     elif method == "nash_bargaining":
         return nash_bargaining_baseline(profiles, issues)
-    elif method == "single_llm_oracle":
-        return single_llm_oracle_baseline(profiles, issues)
+    elif method in ("random_uniform", "random"):
+        return {
+            i["name"]: float(round(float(np.random.uniform(i["range"][0], i["range"][1])), 2))
+            for i in issues
+        }
     else:
         raise ValueError(f"Unknown baseline method: {method}")
