@@ -489,6 +489,7 @@ def generate_from_description(
         response_model=_LLMScenarioResponse,
         temperature=0.2,
         max_tokens=8192,
+        extra_body={"reasoning_effort": "low"},
     )
 
     issues_raw = [

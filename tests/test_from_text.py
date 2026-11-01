@@ -506,4 +506,67 @@ class TestGenerateFromDescription:
         assert "distance_to_frontier" in summary
         assert len(summary["explanation"].split(".")) >= 3
 
+    def test_feasibility_check_satisfiable_sum_but_no_joint_point(self):
+        """
+        True grid/Monte Carlo feasibility test:
+        Even though sum(r_i) = 0.60 + 0.60 = 1.20 <= 2.0 (satisfiable under naive sum),
+        no point in the issue space gives both parties utility >= 0.60 simultaneously.
+        """
+        from scenarios.from_text import check_scenario_feasibility
+        from src.models.utility import StakeholderProfile, UtilityFunction, Issue
+
+        issue = Issue(name="price", min_value=0.0, max_value=100.0, description="Price")
+        issues_meta = [{"name": "price", "range": [0.0, 100.0], "description": "Price"}]
+
+        # Party 1: wants low price (ideal=0), rv=0.60 -> requires price <= 40
+        p1 = StakeholderProfile(
+            name="Buyer", role="Buyer", persona="",
+            utility_function=UtilityFunction(weights={"price": 1.0}, ideal_values={"price": 0.0}, issues=[issue]),
+            reservation_value=0.60,
+        )
+        # Party 2: wants high price (ideal=100), rv=0.60 -> requires price >= 60
+        p2 = StakeholderProfile(
+            name="Seller", role="Seller", persona="",
+            utility_function=UtilityFunction(weights={"price": 1.0}, ideal_values={"price": 100.0}, issues=[issue]),
+            reservation_value=0.60,
+        )
+
+        # Sum of reservation values is 1.20 <= 2.0 (satisfiable under naive sum)
+        assert p1.reservation_value + p2.reservation_value == 1.20
+        assert p1.reservation_value + p2.reservation_value <= 2.0
+
+        # But true grid test finds no point where both are satisfied
+        is_feasible, surplus = check_scenario_feasibility([p1, p2], issues_meta)
+        assert is_feasible is False
+        assert surplus < 0
+
+    @pytest.mark.integration
+    def test_six_issue_five_party_live_parse_no_truncation(self):
+        """Bug 6.9: Test large 6-issue x 5-party prompt against real API with reasoning_effort='low'."""
+        desc = (
+            "Five international aerospace consortium partners (AeroFrance, GermanTech, ItalianSpace, SpanishAvionics, UKDefense) "
+            "are negotiating a multinational next-generation satellite constellation project across 6 core issues: "
+            "1. Total project budget ($100M to $500M). "
+            "2. Workshare allocation for UKDefense (10% to 40%). "
+            "3. Headquarters location tier (1=Paris, 2=Munich, 3=Rome, 4=Madrid). "
+            "4. Delivery timeline in years (3 to 10 years). "
+            "5. Intellectual property data sharing rights tier (1=restricted, 2=shared consortium, 3=fully open). "
+            "6. Ground station count (5 to 30 stations). "
+            "AeroFrance demands high budget ($450M) and Paris headquarters (1). "
+            "GermanTech prioritizes Munich headquarters (2) and shorter delivery timeline (4 years). "
+            "ItalianSpace focuses on ground stations (25 stations) and Rome headquarters (3). "
+            "SpanishAvionics cares deeply about open IP rights (3) and affordable budget ($200M). "
+            "UKDefense strictly insists on at least 35% workshare and restricted IP sharing (1)."
+        )
+        profiles, issues, report = generate_from_description(desc, seed=42)
+        assert len(issues) == 6
+        assert len(profiles) == 5
+        for p in profiles:
+            weights = p.utility_function.weights
+            assert abs(sum(weights.values()) - 1.0) < 1e-4
+            ideal_u = p.evaluate_proposal(p.utility_function.ideal_values)
+            assert abs(ideal_u - 1.0) < 1e-4
+
+
+
 

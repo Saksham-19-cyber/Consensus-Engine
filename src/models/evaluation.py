@@ -71,6 +71,7 @@ class TrialResult(BaseModel):
     model_names: dict[str, str] = Field(default_factory=dict)
     git_commit_hash: str = ""
     timestamp: str = ""
+    llm_calls: int = 0
     # Bluff detection scores (empty for non-mediated protocols)
     bluff_detection_scores: dict[str, dict[str, float]] = Field(default_factory=dict)
 

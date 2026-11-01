@@ -94,7 +94,8 @@ def run_reservation_sweep(
                     for p in profiles:
                         p.reservation_value = r
 
-                    # Do NOT pass scenario_name to prevent ChromaDB precedent contamination
+                    from src.llm.client import get_total_calls
+                    calls_before = get_total_calls()
                     outcome = run_negotiation(
                         profiles=profiles,
                         issues=issues,
@@ -103,8 +104,9 @@ def run_reservation_sweep(
                         model_config=model_config,
                         protocol="single_text",
                     )
+                    trial_calls = get_total_calls() - calls_before
 
-                    metrics = evaluate_outcome(outcome, profiles, issues)
+                    pareto, fairness, per_agent = evaluate_outcome(outcome.final_proposal, profiles, issues)
 
                     # Check breach: deal reached but any agent's true utility < reservation
                     breached = False
@@ -117,21 +119,19 @@ def run_reservation_sweep(
                         engine_breaches += 1
 
                     trial_res = TrialResult(
-                        trial_id=f"res_{r:.2f}_{seed}",
-                        scenario=scenario_key,
+                        trial_id=seed,
+                        scenario_name=scenario_key,
                         method="consensus_engine",
                         protocol="single_text",
                         agreement_reached=outcome.agreement_reached,
                         rounds_taken=outcome.rounds_taken,
                         final_proposal=outcome.final_proposal,
-                        efficiency_metrics=metrics.efficiency,
-                        fairness_metrics=metrics.fairness,
+                        per_agent_utilities=per_agent,
+                        pareto=pareto,
+                        fairness=fairness,
                         seed=seed,
+                        llm_calls=trial_calls,
                         model_names={"mediator": model_config, "stakeholder": model_config},
-                        messages=[
-                            {"agent_name": m.agent_name, "content": m.content, "role": m.role, "metadata": m.metadata}
-                            for m in outcome.messages
-                        ],
                     )
                     writer.write(trial_res)
                     engine_trials_run += 1
@@ -219,6 +219,8 @@ def run_anchor_sweep(
                         if p.role == "Supplier":
                             p.utility_function.ideal_values["unit_price"] += delta
 
+                    from src.llm.client import get_total_calls
+                    calls_before = get_total_calls()
                     outcome = run_negotiation(
                         profiles=profiles_manip,
                         issues=issues,
@@ -227,8 +229,9 @@ def run_anchor_sweep(
                         model_config=model_config,
                         protocol="single_text",
                     )
+                    trial_calls = get_total_calls() - calls_before
 
-                    metrics = evaluate_outcome(outcome, profiles_manip, issues)
+                    pareto, fairness, per_agent = evaluate_outcome(outcome.final_proposal, profiles_manip, issues)
 
                     # Check if mediator flagged bluffing
                     bluff_flagged = any(
@@ -240,21 +243,19 @@ def run_anchor_sweep(
                         engine_bluff_flags += 1
 
                     trial_res = TrialResult(
-                        trial_id=f"anchor_{int(infl*100)}_{seed}",
-                        scenario=scenario_key,
+                        trial_id=seed,
+                        scenario_name=scenario_key,
                         method="consensus_engine",
                         protocol="single_text",
                         agreement_reached=outcome.agreement_reached,
                         rounds_taken=outcome.rounds_taken,
                         final_proposal=outcome.final_proposal,
-                        efficiency_metrics=metrics.efficiency,
-                        fairness_metrics=metrics.fairness,
+                        per_agent_utilities=per_agent,
+                        pareto=pareto,
+                        fairness=fairness,
                         seed=seed,
+                        llm_calls=trial_calls,
                         model_names={"mediator": model_config, "stakeholder": model_config},
-                        messages=[
-                            {"agent_name": m.agent_name, "content": m.content, "role": m.role, "metadata": m.metadata}
-                            for m in outcome.messages
-                        ],
                     )
                     writer.write(trial_res)
 

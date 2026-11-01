@@ -94,6 +94,7 @@ def _call_groq(
     temperature: float,
     response_format: dict | None = None,
     max_tokens: int = 4096,
+    extra_body: dict | None = None,
 ) -> str:
     client = get_client()
     kwargs = {
@@ -104,6 +105,8 @@ def _call_groq(
     }
     if response_format:
         kwargs["response_format"] = response_format
+    if extra_body:
+        kwargs["extra_body"] = extra_body
 
     time.sleep(0.5)
     start = time.time()
@@ -130,6 +133,7 @@ def structured_completion(
     temperature: float | None = None,
     max_retries: int | None = None,
     max_tokens: int | None = None,
+    extra_body: dict | None = None,
 ) -> T:
     model = model or settings.negotiator_model
     temperature = temperature if temperature is not None else settings.temperature
@@ -158,7 +162,7 @@ def structured_completion(
     last_error = None
     for attempt in range(max_retries):
         try:
-            raw = _call_groq(patched_messages, model, temperature, response_format, max_tokens=tokens)
+            raw = _call_groq(patched_messages, model, temperature, response_format, max_tokens=tokens, extra_body=extra_body)
             cleaned_raw = raw.strip()
             if cleaned_raw.startswith("```"):
                 lines = cleaned_raw.splitlines()
