@@ -8,13 +8,13 @@
 [![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-1C8B6E?style=for-the-badge&logo=chainlink&logoColor=white)](https://github.com/langchain-ai/langgraph)
 [![Groq](https://img.shields.io/badge/LLM-Groq%20SDK-F55036?style=for-the-badge&logo=openai&logoColor=white)](https://groq.com)
 [![ChromaDB](https://img.shields.io/badge/Memory-ChromaDB-E85D04?style=for-the-badge&logo=databricks&logoColor=white)](https://trychroma.com)
-[![Tests](https://img.shields.io/badge/Tests-131%20passing-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-132%20passing-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-A371F7?style=for-the-badge)](LICENSE)
 
 <br/>
 
-**An autonomous, production-grade multi-agent negotiation system built on LangGraph.**  
-LLM-driven stakeholder agents with *private* utility functions, *strategic misrepresentation*, and *empirically measured* privacy leakage negotiate toward mutually acceptable, structurally private agreements under strategic constraints — across two distinct protocols, with full statistical rigour.
+**An autonomous multi-agent negotiation system built on LangGraph.**  
+LLM-driven stakeholder agents with *private* utility functions, *strategic misrepresentation*, and *empirically measured* privacy leakage negotiate toward mutually acceptable, structurally private agreements under strategic constraints — across two distinct protocols.
 
 <br/>
 
@@ -33,33 +33,33 @@ Most "multi-agent negotiation" demos are cooperative solvers in disguise. Agents
 | Feature | Most frameworks | Consensus Engine |
 |---|---|---|
 | Agent preferences | Shared openly | Structurally private utility functions (audited for behavioral leakage) |
-| Agent honesty | Always honest | Parameterised strategic misrepresentation |
+| Agent honesty | Always honest | Parameterised strategic misrepresentation *(implemented; not empirically evaluated)* |
 | Privacy measurement | "By design" claim | Empirically probed via reconstruction LLM |
 | Protocol choice | One fixed flow | Mediated *or* Alternating-Offers |
 | Result reporting | Point estimates | Mean ± 95% bootstrap CI + Wilcoxon tests |
 | Audit trail | None | Full JSONL log per trial, re-aggregatable |
-| Session memory | Stateless | ChromaDB precedents seeded into new sessions |
+| Session memory | Stateless | ChromaDB precedents seeded into new sessions *(implemented; not empirically evaluated)* |
 
 ---
 
 ## 🧠 Research Contributions
 
-### 1 · Strategic Misrepresentation
+### 1 · Strategic Misrepresentation *(Implemented; Not Empirically Evaluated)*
 Each agent has a continuous `honesty_level ∈ [0, 1]`. Agents with `honesty_level < 1` are **strategic negotiators** — they anchor demands above their true ideal, suppress stated concession willingness in early rounds, and converge toward truth only as the deadline approaches. This is parameterised by the equation:
 
 $$\hat{U}_i(\mathbf{x}, t) = U_i(\mathbf{x}) \cdot \left(1 - (1 - h_i) \cdot 0.3 \cdot \left(1 - \left(\frac{t}{T}\right)^2\right)\right)$$
 
-The agent's **true** utility always governs the `acceptable` flag — strategic agents cannot bluff themselves into impasse.
+The agent's **true** utility always governs the `acceptable` flag — strategic agents cannot bluff themselves into impasse. *(Note: Stage c strategic misrepresentation benchmark is not yet run).*
 
 ### 2 · Empirical Privacy Measurement & Behavioral Leakage
 After each session, a **reconstruction probe LLM** reads the full dialogue transcript and attempts to infer each agent's utility weight distribution. Leakage is measured as:
 
 $$\text{LeakScore}_i = \text{CosineSim}\left(\mathbf{w}_i,\ \hat{\mathbf{w}}_i\right)$$
 
-Reference baselines are computed for comparison: a uniform-guess baseline (which averages ~0.80 for non-negative normalized weights on 5 issues) and a random Dirichlet baseline. Leakage is reported both as absolute cosine similarity and as lift over the uniform baseline. The framework empirically tests behavioral leakage across both public dialogue and transcripts containing private reasoning metadata.
+Reference baselines are computed for comparison: a uniform-guess baseline (which averages ~0.80 for non-negative normalized weights on 5 issues) and a random Dirichlet baseline. Leakage is reported both as absolute cosine similarity and as lift over the uniform baseline. The framework empirically tests behavioral leakage across both public dialogue and transcripts containing private reasoning metadata. *(Note: Stage e probe run is not yet run).*
 
 ### 3 · Mediator Bluff Detection
-The mediator maintains a rolling window of `(satisfaction_score, concession_willingness)` tuples per agent. Agents with persistently low satisfaction **and** low concession willingness are flagged as potential bluffers. Their names are injected into the revision prompt, causing the mediator to conserve concession budget until deadline pressure forces genuine signalling.
+The mediator maintains a rolling window of `(satisfaction_score, concession_willingness)` tuples per agent. Agents with persistently low satisfaction **and** low concession willingness are flagged as potential bluffers. Their names are injected into the revision prompt, causing the mediator to conserve concession budget until deadline pressure forces genuine signalling. *(Note: Requires $\ge 3$ rounds; has not triggered in 1-round benchmark runs).*
 
 ### 4 · Dual-Protocol Comparison
 Two fundamentally different negotiation architectures run on identical scenarios, enabling controlled protocol comparison:
@@ -70,10 +70,10 @@ Two fundamentally different negotiation architectures run on identical scenarios
 | `alternating_offers` | Direct turn-taking: Accept / Counteroffer / Walk-Away | ❌ None |
 
 ### 5 · Statistically Credible Evaluation
-All reported numbers include **95% bootstrap confidence intervals** (1,000 resamples) and **Wilcoxon signed-rank tests** vs. the Consensus Engine baseline. Every trial is streamed to auditable JSONL logs in `data/logs/` — you can re-aggregate independently without re-running.
+All reported numbers include **95% bootstrap confidence intervals** (1,000 resamples) and **Wilcoxon signed-rank tests** vs. the Consensus Engine baseline. Every trial is streamed to auditable JSONL logs in `results/` and `data/logs/` — you can re-aggregate independently without re-running.
 
-### 6 · Cross-Session Precedent Memory
-A ChromaDB vector store persists negotiation outcomes after each session. On subsequent runs, the mediator's `propose_initial()` fetches semantically similar past proposals and uses them as soft anchors. The read/write loop is closed and tested — not a README claim.
+### 6 · Cross-Session Precedent Memory *(Implemented; Not Empirically Evaluated)*
+A ChromaDB vector store persists negotiation outcomes after each session. On subsequent runs, the mediator's `propose_initial()` fetches semantically similar past proposals and uses them as soft anchors. The read/write loop is closed and unit-tested, though not yet evaluated in a multi-session ablation.
 
 ---
 
@@ -167,15 +167,23 @@ Weights $w_{i,k}$ and ideal values $x_{i,k}^{\ast}$ are **never transmitted** �
 
 ### Nash Social Welfare
 
-$$\text{NSW}(\mathbf{x}^{\ast}) = \left(\prod_{i=1}^{N} \max\left(U_i(\mathbf{x}^{\ast}) - r_i,\ \varepsilon\right)\right)^{1/N}$$
+As implemented in `src/eval/fairness.py` (`nash_social_welfare`), Nash social welfare is computed as the product of agent utilities:
 
-where $r_i$ is agent $i$'s reservation value and $\varepsilon = 10^{-10}$.
+$$\text{NSW}(\mathbf{x}^{\ast}) = \prod_{i=1}^{N} \max\left(U_i(\mathbf{x}^{\ast}),\ \varepsilon\right)$$
 
-### Pareto Efficiency Ratio
+where $\varepsilon = 10^{-10}$.
 
-$$\text{PER}(\mathbf{x}^{\ast}) = \frac{\sum_{i=1}^{N} U_i(\mathbf{x}^{\ast})}{\displaystyle\max_{\mathbf{x} \in \mathcal{F}} \sum_{i=1}^{N} U_i(\mathbf{x})}$$
+### Utilitarian Welfare Ratio & Distance to Frontier
 
-where $\mathcal{F}$ is the Pareto frontier computed by grid search over the issue space.
+The **Utilitarian Welfare Ratio** measures the achieved sum of utilities relative to the maximum possible sum on the Pareto frontier:
+
+$$\text{UWR}(\mathbf{x}^{\ast}) = \frac{\sum_{i=1}^{N} U_i(\mathbf{x}^{\ast})}{\displaystyle\max_{\mathbf{u} \in \mathcal{F}} \sum_{i=1}^{N} u_i}$$
+
+The **Distance to Frontier** measures the Euclidean distance from the achieved utility vector $\mathbf{u}(\mathbf{x}^{\ast})$ to the nearest point on the Pareto frontier $\mathcal{F}$ in $[0, 1]^N$ utility space:
+
+$$\text{DistToFrontier}(\mathbf{x}^{\ast}) = \min_{\mathbf{y} \in \mathcal{F}} \|\mathbf{u}(\mathbf{x}^{\ast}) - \mathbf{y}\|_2$$
+
+where $\mathcal{F}$ is the Pareto frontier computed by exhaustive grid search ($\le 4$ issues) or Monte Carlo sampling (5–6 issues).
 
 ### Bluff Detection Heuristic
 
@@ -224,12 +232,13 @@ The `acceptable` flag is always determined by **true utility** — strategic age
 ### Running Benchmarks
 
 ```bash
-# n=30 trials across all baselines + Consensus Engine on business_deal
+# N=30 trials across all baselines + Consensus Engine on business_deal
 python -m src.eval.runner \
   --scenario business_deal \
   --n_trials 30 \
-  --model_config 70b_vs_8b \
-  --run_privacy_probe
+  --protocol single_text \
+  --model_config 20b_vs_20b \
+  --log_file results/benchmark_business_deal.jsonl
 
 # Re-aggregate from saved JSONL without re-running
 python -c "
@@ -238,78 +247,41 @@ from src.eval.runner import aggregate_results
 from src.eval.report import generate_markdown_report
 from pathlib import Path
 
-results = load_trial_log(Path('data/logs/business_deal_20260903T...jsonl'))
+results = load_trial_log(Path('results/benchmark_business_deal.jsonl'))
 summary = aggregate_results(results, engine_method='consensus_engine')
 print(generate_markdown_report('business_deal', summary, results))
 "
 ```
 
-### What the Report Looks Like
-
-```
-| Method              | Agree%  | Pareto Ratio (95% CI)  | Nash Welfare (95% CI)  | Gini  |
-|---------------------|---------|------------------------|------------------------|-------|
-| consensus_engine    | (engine)| 0.847±0.031            | 0.621±0.029            | 0.089 |
-| nash_bargaining     | (n.s.)  | 0.812±0.038            | 0.598±0.034            | 0.101 |
-| naive_average       | **      | 0.703±0.042            | 0.521±0.039            | 0.134 |
-```
-
-`**` = Wilcoxon p < 0.01 vs. Consensus Engine. `*` = p < 0.05. `(n.s.)` = not significant.
-
 ### Model Configurations
 
 | Config | Stakeholder Model | Mediator Model | Use Case |
 |---|---|---|---|
-| `120b_vs_20b` | `openai/gpt-oss-120b` | `openai/gpt-oss-20b` | Default — asymmetric high intelligence |
-| `20b_vs_20b` | `openai/gpt-oss-20b` | `openai/gpt-oss-20b` | Fast / low-latency ablation |
+| `20b_vs_20b` | `openai/gpt-oss-20b` | `openai/gpt-oss-20b` | **Used for published benchmark runs** (N=30 Stage a) |
+| `120b_vs_20b` | `openai/gpt-oss-120b` | `openai/gpt-oss-20b` | Asymmetric high intelligence |
 | `120b_vs_120b` | `openai/gpt-oss-120b` | `openai/gpt-oss-120b` | Maximum capability benchmark |
+
+> **Note**: All published empirical results in this repository were produced using the `20b_vs_20b` model configuration.
 
 ### Baselines
 
-| Baseline | Description |
-|---|---|
-| `naive_average` | Midpoint of each issue range |
-| `nash_bargaining` | Maximise $\prod_i (U_i - r_i)$ by grid search |
-| `single_llm_oracle` | Single LLM asked to propose a fair outcome (no negotiation) |
+| Baseline | Description | Information Access |
+|---|---|---|
+| `public_midpoint` | Midpoint of each public issue range $[x_k^{\min}, x_k^{\max}]$ | Public domain bounds only |
+| `naive_average` | Arithmetic mean of agents' private ideal points | Privileged semi-oracle (knows all private targets) |
+| `random_uniform` | Random uniform coordinate sampled within issue bounds | Public domain bounds only |
+| `nash_bargaining` | Maximise $\prod_i \max(U_i - r_i, 0)$ via exhaustive grid search | Full-information cooperative oracle |
+| `single_llm_oracle` | Single LLM prompted with full private profiles to propose an outcome | Full-information unmediated oracle |
 
 ---
 
-## 📊 Concrete Execution Outputs (Verified Live Runs)
+## 📊 Concrete Execution Outputs
 
-The following outputs are drawn directly from unedited, verifiable execution runs using Groq (`openai/gpt-oss-120b` and `openai/gpt-oss-20b`) across our scenarios and evaluation suites.
+The following outputs and benchmark tables are drawn from tracked execution runs across our evaluation suite.
 
-### 1 · Live Multi-Agent Strategic Negotiation Session
+### 1 · Multi-Agent Strategic Negotiation Session (Stage c)
 
-In this 3-party negotiation (`SupplierCo`, `BuyerInc`, `LogiTrans`), `SupplierCo` was initialized with a strategic posture (`honesty_level = 0.56`), anchoring high on unit price and payment terms while deflating stated satisfaction in early rounds.
-
-**Agent Posture & Private Reservations:**
-```text
-SupplierCo (Supplier):           honesty=0.56, reservation=0.33  [STRATEGIC BLUFFING ACTIVE]
-BuyerInc   (Buyer):              honesty=0.97, reservation=0.33  [HONEST]
-LogiTrans  (Logistics Provider): honesty=0.81, reservation=0.35  [MODERATE CONCESSION]
-```
-
-**Outcome Telemetry:**
-```json
-{
-  "status": "agreed",
-  "agreement_reached": true,
-  "rounds_taken": 2,
-  "protocol_used": "single_text",
-  "final_proposal": {
-    "unit_price": 55.0,
-    "order_volume": 5000.0,
-    "delivery_days": 15.0,
-    "payment_terms": 45.0,
-    "quality_tier": 3.5
-  },
-  "per_agent_utilities": {
-    "SupplierCo": 0.7717,
-    "BuyerInc": 0.5955,
-    "LogiTrans": 0.8633
-  }
-}
-```
+*Not yet run in batch benchmarks (resume with `python -m src.eval.runner --scenario strategic_negotiation --n_trials 30 --protocol single_text --model_config 20b_vs_20b --log_file results/benchmark_strategic_negotiation.jsonl`).*
 
 ### 2 · Empirical Privacy Probe: The Gap Between Structural Privacy & Behavioral Leakage
 
@@ -317,102 +289,44 @@ A central architectural pillar of multi-agent negotiation frameworks is **struct
 
 However, our post-hoc **reconstruction probe evaluates behavioral leakage** against empirical baselines: a uniform guess (which scores ~0.80 cosine similarity for non-negative normalized weights on 5 issues) and a random Dirichlet baseline. Leakage is measured as lift over the uniform baseline:
 
-> ⚠️ **Key Research Finding — Evaluating Behavioral Disclosure:**  
+> ⚠️ **Evaluating Behavioral Disclosure:**  
 > The probe assesses how much additional preference structure is disclosed beyond reference baselines. Because negotiation requires communicating trade-offs ("*I cannot accept 20-day delivery unless price drops*"), natural language can expose weight priorities even when raw parameters are never transmitted.
 
-```json
-{
-  "uniform_baseline_cosine": 0.8000,
-  "dirichlet_baseline_cosine": 0.6750,
-  "public_transcript": {
-    "mean_cosine_similarity": 0.8250,
-    "lift_over_uniform": 0.0312,
-    "analysis": "Public transcript reveals minor directional priorities (+3.1% lift over uniform guessing)"
-  },
-  "with_reasoning": {
-    "mean_cosine_similarity": 0.8650,
-    "lift_over_uniform": 0.0813,
-    "analysis": "Private reasoning metadata exposes additional preference structure (+8.1% lift over uniform guessing)"
-  }
-}
-```
+*Not yet run in published benchmarks (requires running with `--run_privacy_probe`).*
 
 ### 3 · Real-Time Mediator Bluff Detection Telemetry & Activation Conditions
 
-The mediator tracks agent behavior via a rolling window of $W=3$ rounds on `(satisfaction_score, concession_willingness)` tuples per agent. The detector operates across two operational phases:
+The mediator tracks agent behavior via a rolling window of $W=3$ rounds on `(satisfaction_score, concession_willingness)` tuples per agent. The detector triggers when an agent exhibits persistently low satisfaction ($\bar{s} < 4.0$) and minimal concession ($\bar{c} < 0.2$) across 3 consecutive rounds.
 
-#### Phase A: Calibration Mode ($t < W=3$ rounds)
-In short negotiations that conclude quickly (such as the 2-round agreement in Section 1), the rolling window has observed only 1 critique round (`rounds_tracked: 1.0`). To prevent premature false positives before baseline behavior is established, the heuristic mathematically requires $W \ge 3$ consecutive rounds before firing:
-
-```json
-{
-  "SupplierCo": {
-    "avg_satisfaction": 6.2,
-    "avg_concession": 0.2,
-    "rounds_tracked": 1.0,
-    "bluff_suspected": false,
-    "detector_status": "CALIBRATING (sample window requires t >= 3)"
-  },
-  "BuyerInc": {
-    "avg_satisfaction": 4.5,
-    "avg_concession": 0.2,
-    "rounds_tracked": 1.0,
-    "bluff_suspected": false,
-    "detector_status": "CALIBRATING (sample window requires t >= 3)"
-  },
-  "LogiTrans": {
-    "avg_satisfaction": 7.5,
-    "avg_concession": 0.2,
-    "rounds_tracked": 1.0,
-    "bluff_suspected": false,
-    "detector_status": "CALIBRATING (sample window requires t >= 3)"
-  }
-}
-```
-
-#### Phase B: Active Triggering Mode ($t \ge W=3$ rounds)
-In extended or deadlocked negotiations where a strategic agent (e.g. `SupplierCo` with `honesty_level = 0.25`) sustains artificial dissatisfaction ($\bar{s} < 4.0$) and refuses to concede ($\bar{c} < 0.2$) across 3 consecutive rounds, the detector triggers and alters mediator behavior:
-
-```json
-{
-  "SupplierCo": {
-    "avg_satisfaction": 2.8,
-    "avg_concession": 0.05,
-    "rounds_tracked": 3.0,
-    "bluff_suspected": true,
-    "detector_status": "ACTIVE_FLAG_TRIGGERED"
-  }
-}
-```
-
-**Resulting Mediator Prompt Directive:**
-```text
-TACTICAL WARNING: The following stakeholders have exhibited persistently low satisfaction 
-with minimal concession willingness across the last 3 rounds: ['SupplierCo'].
-They may be bluffing or exaggerating dissatisfaction. Do NOT over-concede to them at the 
-expense of other participants. Hold firm on balanced terms until deadline pressure mounts.
-```
+> ℹ️ **Empirical Status:**  
+> Because all 30 empirical trials in the Stage a benchmark concluded in round 1 upon the mediator's initial proposal, the rolling 3-round window never accumulated enough history to trigger. The bluff detector is implemented in `src/agents/mediator.py` and unit-tested in `tests/test_strategic.py`, but has no empirical trigger data from live multi-round sessions yet.
 
 ### 4 · Benchmark Evaluation with 95% Bootstrap CIs & Wilcoxon Tests
 
-All numbers below were produced by real runs and are documented in [`RESULTS.md`](RESULTS.md).
+All numbers below are generated directly from the tracked log files (`results/benchmark_business_deal.jsonl` and `results/reservation_sweep.jsonl`) via `scripts/update_readme_results.py`.
 
 #### Stage a: Fixed Benchmark (`business_deal`, `single_text`)
 
 Reproduction command:
 ```bash
-python -m src.eval.runner --scenario business_deal --n_trials 30 --protocol single_text --model_config 120b_vs_20b --run_privacy_probe
+python -m src.eval.runner --scenario business_deal --n_trials 30 --protocol single_text --model_config 20b_vs_20b --log_file results/benchmark_business_deal.jsonl
 ```
 
+<!-- RESULTS:START stage_a_table -->
 | Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Wilcoxon vs Engine |
 |---|---|---|---|---|---|---|---|---|
-| `consensus_engine` | 100.0% | 0.075 ± 0.014 | 0.403 ± 0.025 | 0.905 | 0.632 | 0.071 | 1.0 | *(Engine)* |
-| `naive_average` | 100.0% | 0.036 ± 0.008 | 0.453 ± 0.019 | 0.953 | 0.684 | 0.065 | 0.0 | p = 0.000038 (**) |
-| `public_midpoint` | 100.0% | 0.072 ± 0.012 | 0.389 ± 0.014 | 0.908 | 0.619 | 0.075 | 0.0 | p = 0.0131 (*) |
-| `random_uniform` | 96.7% | 0.161 ± 0.035 | 0.289 ± 0.031 | 0.821 | 0.539 | 0.083 | 0.0 | p = 0.0005 (**) |
+| `consensus_engine` | 100.0% | 0.0654 [0.0544, 0.0780] | 0.3990 [0.3811, 0.4179] | 0.9156 [0.9022, 0.9274] | 0.6266 | 0.0753 | 1.0 | *(Engine)* |
+| `naive_average` | 100.0% | 0.0362 [0.0288, 0.0441] | 0.4532 [0.4342, 0.4723] | 0.9525 [0.9425, 0.9612] | 0.6843 | 0.0651 | 0.0 | p = <1e-6 ** |
+| `nash_bargaining` | 100.0% | 0.0350 [0.0310, 0.0391] | 0.5481 [0.5202, 0.5757] | 0.9991 [0.9977, 0.9999] | 0.7368 | 0.0504 | 0.0 | p = <1e-6 ** |
+| `private_ideal_average` | 100.0% | 0.0362 [0.0288, 0.0441] | 0.4532 [0.4342, 0.4723] | 0.9525 [0.9425, 0.9612] | 0.6843 | 0.0651 | 0.0 | p = <1e-6 ** |
+| `public_midpoint` | 100.0% | 0.0725 [0.0612, 0.0849] | 0.3885 [0.3744, 0.4019] | 0.9082 [0.8952, 0.9203] | 0.6193 | 0.0748 | 0.0 | p = 0.0017 ** |
+| `random_uniform` | 96.7% | 0.1610 [0.1281, 0.1973] | 0.2887 [0.2594, 0.3207] | 0.8205 [0.7912, 0.8480] | 0.5390 | 0.0826 | 0.0 | p = <1e-6 ** |
+<!-- RESULTS:END stage_a_table -->
 
-> ⚠️ **Empirical Finding — Baseline Comparison:**  
-> In symmetric linear continuous domains without private reservation boundaries, arithmetic baselines like `naive_average` achieve high utilitarian welfare (0.953) because the arithmetic mean is an effective centroid when preferences are symmetric. The Consensus Engine achieves 0.905 utilitarian welfare ratio with a mean distance to the Pareto frontier of 0.075. However, the engine's critical value lies in enforcing voluntary agreement and privacy protection in asymmetric and strategic settings.
+> ⚠️ **What This Benchmark Measures (Honest Caveat):**  
+> All 30 Consensus Engine trials ended in round 1 with exactly 4 LLM calls each (1 mediator proposal + 3 stakeholder critiques). Every party accepted the mediator's first proposal immediately. The engine's modest edge over the public midpoint (distance to frontier 0.0654 vs 0.0725, Wilcoxon $p = 0.0017^{**}$; Nash welfare $p = 0.0015^{**}$) therefore reflects the mediator adjusting the midpoint using issue descriptions, **NOT iterative negotiation**. This should not be described or interpreted as negotiation superiority.
+>
+> In symmetric continuous domains without private reservation boundaries, arithmetic baselines like `naive_average` achieve high utilitarian welfare (0.9525) because the arithmetic mean is an effective centroid when preferences are symmetric. The engine's genuine utility arises in enforcing voluntary agreement and privacy in asymmetric and reservation-constrained regimes.
 
 #### Stage d: Reservation Impasse & Strategic Sweeps
 
@@ -425,17 +339,22 @@ python scripts/sweep_anchor_and_reservation.py --n_engine 30 --n_baselines 100 -
 
 > **Definition of Breach**: An outcome where an agreement was reached, but at least one agent's *true* utility fell below its private reservation value ($u_i < r_i$). Under individual rationality, a rational negotiator must exit into safe impasse rather than ratify a sub-reservation agreement.
 
+<!-- RESULTS:START reservation_sweep_table -->
 | Reservation ($r$) | Midpoint Failure% ($N=100$) | Midpoint Breach% ($N=100$) | Naive Breach% ($N=100$) | Engine Agreement Rate | Engine Involuntary Breach Rate |
 |---|---|---|---|---|---|
-| $r = 0.40$ | 0.0% | 0.0% | 0.0% | 100.0% | **0.0% (Enforced by code)** |
-| $r = 0.55$ | 4.0% | 4.0% | 0.0% | 100.0% | **0.0% (Enforced by code)** |
-| $r = 0.60$ | 33.0% | 33.0% | 1.0% | 40.0% (60% safe impasse) | **0.0% (Enforced by code)** |
-| $r = 0.65$ | 78.0% | 78.0% | 24.0% | 20.0% (80% safe impasse) | **0.0% (Enforced by code)** |
-| $r = 0.70$ | 100.0% | 100.0% | 67.0% | 0.0% (100% safe impasse) | **0.0% (Enforced by code)** |
+| $r = 0.40$ | 0.0% | 0.0% | 0.0% | 100.0% (2/2 trials) | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.55$ | 4.0% | 4.0% | 0.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.60$ | 33.0% | 33.0% | 1.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.65$ | 78.0% | 78.0% | 24.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.70$ | 100.0% | 100.0% | 67.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+<!-- RESULTS:END reservation_sweep_table -->
 
-*Key Takeaway*: Involuntary breach rate for Consensus Engine is **0.0% by construction**: Individual Rationality is strictly enforced in code (`would_accept()` checks $u_i \ge r_i$). If no deal satisfies all participants, the engine declares a safe impasse. In contrast, midpoint averaging breaches in up to 100% of cases when $r \ge 0.70$, and naive averaging breaches in 67% of cases.
+*Key Takeaway*: Involuntary breach rate for Consensus Engine is **0.0% by construction**: Individual Rationality is strictly enforced in code (`would_accept()` checks $u_i \ge r_i$, tested in `tests/test_individual_rationality.py`). If no deal satisfies all participants, the engine declares a safe impasse. In contrast, midpoint averaging breaches in up to 100% of cases when $r \ge 0.70$, and naive averaging breaches in 67% of cases.
 
 ##### 2. Strategic Anchor Inflation Sweep ($N=100$ baselines)
+
+<!-- RESULTS:START anchor_sweep_table -->
+*Deterministic baseline arithmetic, no LLM*
 
 | Inflation Level | Stated Price Shift ($\Delta P$) | Naive Baseline Price Shift | Naive Capture Rate | Midpoint Baseline Shift |
 |---|---|---|---|---|
@@ -443,15 +362,16 @@ python scripts/sweep_anchor_and_reservation.py --n_engine 30 --n_baselines 100 -
 | **+25%** | +$22.50 | +$7.50 ± $0.00 | 8.3% | +$0.00 (0.0% capture) |
 | **+50%** | +$45.00 | +$15.00 ± $0.00 | 16.7% | +$0.00 (0.0% capture) |
 | **+75%** | +$67.50 | +$22.50 ± $0.00 | 25.0% | +$0.00 (0.0% capture) |
+<!-- RESULTS:END anchor_sweep_table -->
 
-*Key Takeaway*: Naive coordinate averaging is linearly exploited by unconstrained anchor inflation, conceding up to 25.0% of the entire price range. Midpoint coordinate averaging resists price shifts because it only considers domain bounds $[10, 100]$, but cannot express cross-issue trade-offs. Consensus Engine integrates multi-issue trade-offs while mediator bluff detection monitors concession behavior.
+*Key Takeaway*: Naive coordinate averaging is linearly exploited by unconstrained anchor inflation, conceding up to 25.0% of the entire price range. Midpoint coordinate averaging resists price shifts because it only considers domain bounds $[10, 100]$, but cannot express cross-issue trade-offs.
 
-### 5 · Auditable Streaming Trial Log (`data/logs/*.jsonl`)
+### 5 · Auditable Streaming Trial Log (`results/*.jsonl`)
 
 Every trial emits an unedited JSONL record containing raw inputs, proposals, utility evaluations, and fairness metrics for total research reproducibility:
 
 ```json
-{"trial_id":0,"scenario_name":"business_deal","method":"naive_average","protocol":"baseline","agreement_reached":true,"rounds_taken":0,"per_agent_utilities":{"Supplier":0.6852,"Buyer":0.7104,"Logistics":0.8211},"final_proposal":{"unit_price":55.0,"order_volume":5050.0,"delivery_days":15.5,"payment_terms":45.0,"quality_tier":3.0},"pareto":{"distance_to_frontier":0.0381,"efficiency_ratio":0.9512,"is_pareto_optimal":true,"social_welfare":2.2167},"fairness":{"nash_welfare":0.4682,"min_utility":0.6852,"max_utility":0.8211,"gini_coefficient":0.0612,"envy_free":false,"utility_spread":0.1359},"honesty_levels":{"Supplier":1.0,"Buyer":1.0,"Logistics":1.0},"model_config_name":"120b_vs_20b"}
+{"trial_id":42,"scenario_name":"business_deal","seed":42,"method":"consensus_engine","protocol":"single_text","agreement_reached":true,"rounds_taken":1,"per_agent_utilities":{"SupplierCo":0.5754,"BuyerInc":0.5793,"LogiTrans":0.8753},"final_proposal":{"unit_price":55.0,"order_volume":5000.0,"delivery_days":15.0,"payment_terms":45.0,"quality_tier":3.0},"pareto":{"distance_to_frontier":0.0617,"efficiency_ratio":0.9168,"is_pareto_optimal":true,"social_welfare":2.03},"fairness":{"nash_welfare":0.2918,"min_utility":0.5754,"max_utility":0.8753,"gini_coefficient":0.0984,"envy_free":false,"utility_spread":0.2999},"honesty_levels":{"SupplierCo":1.0,"BuyerInc":1.0,"LogiTrans":1.0},"model_config_name":"20b_vs_20b"}
 ```
 
 ---
@@ -481,10 +401,10 @@ cp .env.example .env
 
 ```bash
 pytest -v
-# Expected: 131 passed
+# Expected: 132 passed (+ 1 live integration test requiring GROQ_API_KEY)
 ```
 
-### Run a Negotiation
+### Run a Negotiation *(requires GROQ_API_KEY)*
 
 ```python
 from scenarios.business_deal import BusinessDealScenario
@@ -508,7 +428,7 @@ print(f"Utilities: {outcome.per_agent_utilities}")
 print(f"Protocol: {outcome.protocol_used}")
 ```
 
-### Run with Strategic Agents
+### Run with Strategic Agents *(requires GROQ_API_KEY)*
 
 ```python
 from scenarios.strategic_negotiation import StrategicNegotiationScenario
@@ -535,7 +455,9 @@ privacy = measure_privacy_leakage(
     issues=issues,
 )
 print(f"Mean privacy leakage (cosine): {privacy.mean_cosine_similarity:.3f}")
-print(f"  (random baseline ≈ 0.45 for 5 issues)")
+print(f"  Uniform-guess baseline: {privacy.uniform_baseline_cosine:.3f}")
+print(f"  Dirichlet baseline: {privacy.dirichlet_baseline_cosine:.3f}")
+print(f"  Lift over uniform: {privacy.lift_over_uniform}")
 print(f"Bluff suspects: {outcome.bluff_detection_scores}")
 ```
 
@@ -546,7 +468,11 @@ print(f"Bluff suspects: {outcome.bluff_detection_scores}")
 python -m src.api.main
 # → http://localhost:8000/docs
 
-# Terminal 2: Streamlit dashboard
+# Terminal 2: Next.js research web frontend
+cd web && npm run dev
+# → http://localhost:3000
+
+# Terminal 3 (Optional): Streamlit dashboard
 streamlit run frontend/app.py
 # → http://localhost:8501
 ```
@@ -555,52 +481,107 @@ streamlit run frontend/app.py
 
 ## 📡 API Reference
 
-### `POST /api/negotiate`
+### `POST /api/negotiate` or `/api/negotiate/start`
 
-Run a single negotiation session.
+Initiate a negotiation session. Supports both named scenarios and pre-parsed custom scenarios.
 
+**Request body** (`NegotiateRequest`):
 ```json
 {
   "scenario": "business_deal",
   "n_agents": 3,
   "max_rounds": 10,
   "seed": 42,
-  "protocol": "single_text"
+  "protocol": "single_text",
+  "model_config": "20b_vs_20b",
+  "parsed_scenario_token": null
 }
 ```
 
-**Response** — `NegotiationOutcome`:
+* Query Parameter: `sync=true` returns the complete `SessionResponse` synchronously; `sync=false` (default) dispatches a background task.
+
+**Synchronous Response** — `SessionResponse` *(schema example)*:
 ```json
 {
-  "final_proposal": {"unit_price": 55.2, "order_volume": 2100.0},
-  "per_agent_utilities": {"SupplierCo": 0.72, "BuyerInc": 0.68, "LogiTrans": 0.61},
-  "agreement_reached": true,
-  "rounds_taken": 7,
-  "protocol_used": "single_text",
-  "bluff_detection_scores": {
-    "BuyerInc": {"avg_satisfaction": 2.3, "avg_concession": 0.08, "rounds": 5}
-  }
+  "session_id": "a1b2c3d4",
+  "scenario": "business_deal",
+  "status": "completed",
+  "outcome": {
+    "final_proposal": {"unit_price": 55.0, "order_volume": 5000.0, "delivery_days": 15.0, "payment_terms": 45.0, "quality_tier": 3.0},
+    "per_agent_utilities": {"SupplierCo": 0.58, "BuyerInc": 0.58, "LogiTrans": 0.88},
+    "agreement_reached": true,
+    "rounds_taken": 1,
+    "protocol_used": "single_text",
+    "bluff_detection_scores": {}
+  },
+  "messages": [
+    {"round_number": 1, "agent_name": "Mediator", "role": "mediator", "content": "Initial proposal...", "message_type": "proposal"}
+  ]
 }
 ```
+
+### `GET /api/negotiate/{job_id}` or `/api/negotiate/job/{job_id}`
+
+Poll status and live streaming messages of an active or completed background negotiation job.
+
+**Response** — `JobStatusResponse` *(schema example)*:
+```json
+{
+  "job_id": "a1b2c3d4",
+  "session_id": "a1b2c3d4",
+  "status": "completed",
+  "scenario": "business_deal",
+  "messages": [],
+  "outcome": { "agreement_reached": true, "rounds_taken": 1 },
+  "summary": null,
+  "error": null
+}
+```
+
+### `POST /api/scenario/update`
+
+Re-validates user-edited issues and stakeholder profiles server-side and re-checks mathematical feasibility.
+
+**Request body** (`UpdateScenarioRequest`):
+```json
+{
+  "issues": [
+    {"name": "salary", "range": [50000.0, 150000.0], "description": "Annual base salary"}
+  ],
+  "stakeholders": [
+    {
+      "name": "Candidate",
+      "role": "Engineer",
+      "persona": "",
+      "weights": {"salary": 1.0},
+      "ideal_values": {"salary": 140000.0},
+      "reservation_value": 0.50
+    }
+  ]
+}
+```
+
+**Response**: Returns updated `ParseScenarioResponse` with new `parsed_scenario_token`.
 
 ### `POST /api/eval/run`
 
-Run a full benchmark batch with statistical aggregation.
+Run a benchmark batch with bootstrap statistical aggregation across methods.
 
 ```json
 {
   "scenario": "business_deal",
   "n_trials": 30,
-  "methods": ["naive_average", "nash_bargaining", "consensus_engine"],
-  "model_config": "70b_vs_8b",
-  "run_privacy_probe": true,
+  "methods": ["naive_average", "public_midpoint", "nash_bargaining", "consensus_engine"],
+  "model_config": "20b_vs_20b",
+  "protocol": "single_text",
+  "run_privacy_probe": false,
   "seed": 42
 }
 ```
 
 ### `GET /api/eval/report/{scenario}`
 
-Returns the latest Markdown report for a scenario from `data/logs/`.
+Returns the latest aggregated Markdown evaluation report for a scenario, searching `results/` first, falling back to `data/logs/`.
 
 ---
 
@@ -664,7 +645,7 @@ def compute_baseline(method: str, profiles, issues) -> dict[str, float]:
 
 ## 🏛 Design Decisions
 
-**Why Groq?** Latency. A single mediation round requires 3–5 structured LLM calls in sequence. At Groq speeds, a 10-round negotiation with 3 agents completes in ~15 seconds vs. 3+ minutes on standard APIs.
+**Why Groq?** High-speed LLM inference. A single mediation round requires 3–5 structured LLM calls in sequence (mediator proposal + stakeholder critiques). Fast inference keeps round turnaround responsive across multi-agent loops.
 
 **Why LangGraph?** The negotiation DAG has non-trivial conditional branching (agree / impasse / revise / issue-link). LangGraph's typed state and conditional edges make the flow explicit and testable rather than buried in a callback chain.
 
@@ -680,9 +661,9 @@ Consensus Engine provides two dedicated frontend interfaces for exploring multi-
 
 | Interface | Technology | Primary Purpose | Live URL / Local Access |
 |---|---|---|---|
-| **Production Research Web App** | Next.js 15, TypeScript, Tailwind, Recharts | Interactive runner, 95% bootstrap CI charts, privacy probe simplex visualizer, JSONL trial explorer | **[consensus-engine-opal.vercel.app](https://consensus-engine-opal.vercel.app/)** <br> *(Local: `http://localhost:3000`)* |
+| **Production Research Web App** | Next.js 16.3.4, TypeScript, Tailwind, Recharts | Interactive runner, 95% bootstrap CI charts, privacy probe simplex visualizer, JSONL trial explorer | **[consensus-engine-opal.vercel.app](https://consensus-engine-opal.vercel.app/)** <br> *(Local: `http://localhost:3000`)* |
 | **Streamlit Analytics Dashboard** | Streamlit, Python, Requests | Rapid local experimentation, session playback, parameter sweeps | **[consensus-engine.streamlit.app](https://consensus-engine-y9ybfxmfwcmopgobfzzpjx.streamlit.app/)** <br> *(Local: `http://localhost:8501`)* |
-| **FastAPI Orchestration Backend** | FastAPI, LangGraph, ChromaDB, Groq | Agent graph execution, SQLite audit persistence, precedent memory | **[API Docs](/docs)** <br> *(Local: `http://localhost:8000`)* |
+| **FastAPI Orchestration Backend** | FastAPI, LangGraph, ChromaDB, Groq | Agent graph execution, SQLite audit persistence, precedent memory | **[API Docs](http://localhost:8000/docs)** <br> *(Local: `http://localhost:8000`)* |
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSaksham-19-cyber%2FConsensus-Engine&root-directory=web)
 
@@ -692,8 +673,8 @@ Consensus Engine provides two dedicated frontend interfaces for exploring multi-
 
 * **Live Negotiation Runner**: Configure scenarios (`business_deal`, `roommate`, `strategic_negotiation`), select protocols (`single_text`, `alternating_offers`), and inspect round-by-round proposals, agent critiques, and real-time mediator bluff detection flags.
 * **Benchmark Dashboard**: Interactive bar charts with **95% bootstrap confidence interval error bars**, Wilcoxon significance badges ($p < 0.05^*$, $p < 0.01^{**}$, n.s.), reservation breach curves ($N=100$), and strategic anchor manipulation span capture comparisons ($N=30$).
-* **Privacy Probe View**: Visualizes per-agent preference leakage (cosine similarity vs. $0.4472$ random baseline) with interactive weight simplex radar charts.
-* **Auditable Trial Explorer**: Browse individual streaming JSONL trial records from `data/logs/` with expandable round dialogues and raw JSON inspect/copy modals.
+* **Privacy Probe View**: Visualizes per-agent preference leakage against uniform and Dirichlet baselines with interactive weight simplex radar charts.
+* **Auditable Trial Explorer**: Browse individual streaming JSONL trial records from `results/` (or `data/logs/`) with expandable round dialogues and raw JSON inspect/copy modals.
 
 #### Running Next.js Locally:
 ```bash
@@ -720,13 +701,13 @@ streamlit run frontend/app.py
 
 ---
 
-### 🌐 Deployment on Vercel
+### 🌐 Deployment on Vercel & Backend Hosting
 
 ```
 ┌───────────────────────────────────────┐       ┌────────────────────────────────────────┐
 │         Vercel (Global Edge)          │       │         FastAPI Backend Engine         │
 │                                       │ HTTP  │                                        │
-│  Next.js 15 App Router Frontend       │──────▶│   FastAPI Orchestrator                 │
+│  Next.js 16.3.4 App Router Frontend   │──────▶│   FastAPI Orchestrator                 │
 │  - Recharts Empirical Dashboards      │  & WS │   - LangGraph Agent DAG Execution      │
 │  - Privacy Probe Simplex Visualizer   │       │   - Persistent ChromaDB Memory         │
 │  - JSONL Trial Record Explorer        │       │   - SQLite Audit Storage & Groq Loop   │
@@ -742,8 +723,12 @@ streamlit run frontend/app.py
    ```
 4. Deploy to receive your live `https://<your-project>.vercel.app` URL.
 
-#### Backend Entrypoint
-The backend API exposes a clean ASGI application entrypoint in `app.py` (`from src.api.main import app`) and can be run locally or hosted with:
+#### Backend Architecture & Persistence Notes
+The backend is a persistent FastAPI service (`src.api.main:app`). When hosting:
+* **Serverless Filesystem Limitation:** Vercel serverless function environments provide a read-only filesystem with an ephemeral `/tmp` directory. Local file storage (such as SQLite `sessions.db` or ChromaDB vector store directories) is ephemeral in serverless functions and will not persist across invocations unless connected to an external persistent database (e.g., Turso for SQLite, Supabase, or cloud ChromaDB).
+* **Execution Duration Limits:** Standard Vercel Serverless Functions have duration limits (10s on Hobby, 60s on Pro). Synchronous multi-round negotiation loops exceeding these limits will timeout; host the FastAPI backend on a continuous container platform (Render, Railway, Fly.io, or dedicated VPS) when running multi-round sessions.
+
+Host command:
 ```bash
 uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
@@ -789,13 +774,13 @@ python -m scenarios.from_text --text "FounderCo is licensing software to Enterpr
 
 ```
 POST /api/scenario/parse   →  Confirm & Edit (UI / CLI)  →  Feasibility Check  →  POST /api/negotiate
-      (parse only)             (user inspects & modifies)       (u_joint_res >= 0)         (with token)
+      (parse only)             (user inspects & modifies)       (u_i >= r_i for all)       (with token)
 ```
 
 1. **Describe** — Write a plain-language description of the negotiation in the Next.js **Scenario Builder** tab or CLI.
 2. **Parse & Ordinal-to-Cardinal Mapping** — The LLM extracts issues with numeric ranges and maps ordinal tiers (e.g., support tiers: 1=basic, 2=standard, 3=dedicated) to cardinal intervals.
 3. **Confirm & Edit Step** — The UI presents parsed issues, ranges, party ideal values, weights, and reservation thresholds with clear provenance tags (`user_specified` vs `llm_inferred`). **The user can edit any weight or issue range directly** before running.
-4. **Pre-Flight Feasibility Check** — Before invoking the negotiation graph, the engine tests whether a mutually acceptable deal is mathematically possible ($\sum_i r_i \le \text{surplus}$). If infeasible, an amber warning is raised immediately, avoiding wasted LLM calls.
+4. **Pre-Flight Feasibility Check** — Before invoking the negotiation graph, the engine tests whether a mutually acceptable deal is mathematically possible: checking whether any point in the issue space gives every party $U_i \ge r_i$ (via exhaustive grid search for $\le 4$ issues, or Monte Carlo sampling for 5–6 issues). If infeasible, an amber warning is raised immediately, avoiding wasted LLM calls.
 5. **Run & Plain-Language Summary** — The confirmed scenario executes under `single_text` or `alternating_offers`, outputting both raw numbers and an accessible plain-language narrative.
 
 ### Empirical Validation: 4 Live Custom Checks (N=3 + 1 Infeasible)
@@ -804,7 +789,7 @@ Documented in [`RESULTS.md`](RESULTS.md#stage-f-custom-scenario-checks-illustrat
 1. **Software Licensing (3 issues, 2 parties)**: Feasible. Agreement reached in 1 round at Annual License Fee $260k, Duration 3 yrs, Support Tier 2 (distance to frontier: 0.1000).
 2. **Salary Negotiation (3 issues, 2 fully-specified parties)**: Feasible. Agreement reached in 1 round at Salary $165k, Equity 6,000 shares, 45 remote days (distance to frontier: 0.0259).
 3. **Urban Development (3 issues, 3 parties with 1 LLM-inferred)**: Feasible. Agreement reached in 1 round at Height 17.5 stories, Green space 27.5%, Affordable units 55 (distance to frontier: 0.0212).
-4. **Deliberately Infeasible Dispute (Reservation 0.95 each)**: Pre-flight feasibility check detected negative joint surplus (-0.245) and flagged an immediate warning. Invariant verification confirmed all weight vectors sum strictly to 1.0 and $U(\text{ideal}) = 1.0$.
+4. **Deliberately Infeasible Dispute (Reservation 0.95 each)**: Pre-flight feasibility check detected negative joint surplus (-0.450) and flagged an immediate warning. Invariant verification confirmed all weight vectors sum strictly to 1.0 and $U(\text{ideal}) = 1.0$.
 
 ### Issue Count Limits
 
@@ -814,7 +799,7 @@ Documented in [`RESULTS.md`](RESULTS.md#stage-f-custom-scenario-checks-illustrat
 | 5–6 | Monte Carlo sampling (100,000 random points) | **Approximate** | Efficiency ratios within ±0.3% vs exhaustive |
 | > 6 | Rejected (400 error) | — | — |
 
-The grid search in `src/eval/pareto.py` is exponential in issue count ($12^N$ combos at resolution 12; 248,832 points at 5 issues, ~3M at 6). For 5–6 issues the system switches to `monte_carlo_pareto_frontier()` and labels results "approximate" in the API response and UI.
+The grid search in `src/eval/pareto.py` is exponential in issue count ($12^N$ combos at resolution 12; 248,832 points at 5 issues, ~3M at 6). For 5–6 issues the system switches to `monte_carlo_pareto_frontier()` and labels results `approximate` in the API response and UI.
 
 #### Monte Carlo Accuracy Calibration
 
@@ -883,15 +868,15 @@ Party cards display a **green "User-specified"** badge or an **amber "LLM-inferr
 
 ## ⚠️ Limitations & Honest Research Disclosures
 
-1. **Parity with Midpoint on Symmetric Issues**:
-   - In symmetric linear continuous domains without private reservation thresholds, simple midpoint coordinate averaging achieves comparable or slightly higher utilitarian welfare (0.908 vs 0.905) at zero token and latency cost.
-   - The Consensus Engine provides genuine value in asymmetric, strategic, or private-reservation regimes where midpoint averaging causes up to 100% contract breach, but does not provide an efficiency premium in symmetric linear benchmarks.
-2. **Simulated Agents vs. Human Bargaining**:
+1. **Mediator Midpoint Adjustment vs. Iterative Negotiation**:
+   - In the Stage a benchmark (`business_deal`, $N=30$), all 30 Consensus Engine trials concluded in round 1 with exactly 4 LLM calls each (1 mediator proposal + 3 stakeholder critiques). Every party accepted the mediator's initial proposal.
+   - The engine's slight advantage over the public midpoint (distance to frontier 0.0654 vs 0.0725, $p=0.0017^{**}$; Nash welfare 0.3990 vs 0.3885, $p=0.0015^{**}$) therefore reflects the mediator adjusting the midpoint using issue descriptions, **NOT iterative back-and-forth negotiation**. In symmetric continuous domains without tight private reservations, arithmetic baselines like `naive_average` achieve high utilitarian welfare (0.9525) with zero LLM calls.
+2. **Unrun Stages in Benchmark Suite**:
+   - Stage a was evaluated across $N=30$ live trials (120 real LLM calls) with 5 baselines ($N=150$). Stage d reservation sweep has $N=2$ trials for $r=0.40$ and is unrun for other tiers. Stage b (`alternating_offers`), Stage c (`strategic_negotiation`), and Stage e (privacy probe) are not yet run in batch benchmarks (resume with `make benchmarks`).
+3. **Bluff Detector Lacks Empirical Trial Evidence**:
+   - The mediator's rolling bluff detector requires $W \ge 3$ consecutive rounds of critique history ($\bar{s}_i < 4.0 \;\wedge\; \bar{c}_i < 0.2$). Because all Stage a benchmark trials concluded in round 1, the bluff detector never triggered in real benchmark runs. While unit-tested in `tests/test_strategic.py`, it currently has no empirical activation data from extended multi-round sessions.
+4. **Simulated Agents vs. Human Bargaining**:
    - LLM stakeholder personas simulate bounded concession dynamics and verbal posturing, but cannot fully replicate human psychological factors, reputation concerns, or long-term dynamic relationship considerations.
-3. **Sample Sizes & Rate Limits**:
-   - To respect Groq API free-tier rate and token-per-day quotas (e.g. 200,000 TPD on larger models), Stage a was evaluated across completed empirical runs ($N=18$ live engine trials, $N=90$ baselines), Stage d across $N=100$ baselines, and Stage f across 4 live checks. Stages b (`alternating_offers`) and c (`strategic_negotiation`) are marked *"not yet run (resume with `make benchmarks`)"* in [`RESULTS.md`](RESULTS.md).
-4. **Heuristic Bluff Detection**:
-   - The mediator's rolling bluff detection heuristic relies on satisfaction and concession trends. While effective against simple persistent stonewalling, it may generate false negatives against sophisticated, randomized bluffing strategies.
 
 ---
 
@@ -907,7 +892,7 @@ pydantic      ≥ 2.0       # Schema validation
 numpy         ≥ 1.26.0    # Pareto computation, bootstrap
 scipy         ≥ 1.13.0    # Wilcoxon tests
 fastapi       ≥ 0.115.0   # REST API
-next          ≥ 15.0      # Web frontend
+next          ≥ 16.0      # Web frontend (Next.js 16.3.4)
 recharts      ≥ 2.15.0    # Benchmark visualisations
 ```
 

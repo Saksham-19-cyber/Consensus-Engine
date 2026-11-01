@@ -18,21 +18,25 @@
 
 Reproduction command:
 ```bash
-python -m src.eval.runner --scenario business_deal --n_trials 30 --protocol single_text --model_config 120b_vs_20b --run_privacy_probe
+python -m src.eval.runner --scenario business_deal --n_trials 30 --protocol single_text --model_config 20b_vs_20b --log_file results/benchmark_business_deal.jsonl
 ```
 
-| Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Privacy Cosine |
-|--------|--------|---------------------------|-----------------------|---------------------------|---------|------|--------|----------------|
-| `consensus_engine` | 100.0% | 0.075±0.014 | 0.403±0.025 | 0.905 | 0.632 | 0.071 | 1.0 | — |
-| `naive_average` | 100.0% | 0.036±0.008 | 0.453±0.019 | 0.953 | 0.684 | 0.065 | 0.0 | — |
-| `public_midpoint` | 100.0% | 0.072±0.012 | 0.389±0.014 | 0.908 | 0.619 | 0.075 | 0.0 | — |
-| `random_uniform` | 96.7% | 0.161±0.035 | 0.289±0.031 | 0.821 | 0.539 | 0.083 | 0.0 | — |
+<!-- RESULTS:START stage_a_table -->
+| Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Wilcoxon vs Engine |
+|---|---|---|---|---|---|---|---|---|
+| `consensus_engine` | 100.0% | 0.0654 [0.0544, 0.0780] | 0.3990 [0.3811, 0.4179] | 0.9156 [0.9022, 0.9274] | 0.6266 | 0.0753 | 1.0 | *(Engine)* |
+| `naive_average` | 100.0% | 0.0362 [0.0288, 0.0441] | 0.4532 [0.4342, 0.4723] | 0.9525 [0.9425, 0.9612] | 0.6843 | 0.0651 | 0.0 | p = <1e-6 ** |
+| `nash_bargaining` | 100.0% | 0.0350 [0.0310, 0.0391] | 0.5481 [0.5202, 0.5757] | 0.9991 [0.9977, 0.9999] | 0.7368 | 0.0504 | 0.0 | p = <1e-6 ** |
+| `private_ideal_average` | 100.0% | 0.0362 [0.0288, 0.0441] | 0.4532 [0.4342, 0.4723] | 0.9525 [0.9425, 0.9612] | 0.6843 | 0.0651 | 0.0 | p = <1e-6 ** |
+| `public_midpoint` | 100.0% | 0.0725 [0.0612, 0.0849] | 0.3885 [0.3744, 0.4019] | 0.9082 [0.8952, 0.9203] | 0.6193 | 0.0748 | 0.0 | p = 0.0017 ** |
+| `random_uniform` | 96.7% | 0.1610 [0.1281, 0.1973] | 0.2887 [0.2594, 0.3207] | 0.8205 [0.7912, 0.8480] | 0.5390 | 0.0826 | 0.0 | p = <1e-6 ** |
+<!-- RESULTS:END stage_a_table -->
 
 ## Stage b: Protocol Comparison (single_text vs alternating_offers)
 
 Reproduction command:
 ```bash
-python -m src.eval.runner --scenario business_deal --n_trials 30 --protocol alternating_offers --model_config 120b_vs_20b
+python -m src.eval.runner --scenario business_deal --n_trials 30 --protocol alternating_offers --model_config 20b_vs_20b --log_file results/benchmark_alternating_offers.jsonl
 ```
 
 *Not yet run (resume with `make benchmarks`)*
@@ -41,7 +45,7 @@ python -m src.eval.runner --scenario business_deal --n_trials 30 --protocol alte
 
 Reproduction command:
 ```bash
-python -m src.eval.runner --scenario strategic_negotiation --n_trials 30 --protocol single_text --model_config 120b_vs_20b --run_privacy_probe
+python -m src.eval.runner --scenario strategic_negotiation --n_trials 30 --protocol single_text --model_config 20b_vs_20b --log_file results/benchmark_strategic_negotiation.jsonl
 ```
 
 *Not yet run (resume with `make benchmarks`)*
@@ -56,22 +60,28 @@ python scripts/sweep_anchor_and_reservation.py --n_engine 30 --n_baselines 100 -
 ### Reservation Value Sweep (Failure Rate & Breach Rate)
 > **Definition of Breach**: An outcome where an agreement was reached, but at least one agent's *true* utility fell below its reservation value.
 
-| Reservation (r) | Midpoint Failure% | Midpoint Breach% | Naive Breach% | Engine Agreements | Engine Breaches |
-|-----------------|-------------------|------------------|---------------|-------------------|-----------------|
-| r = 0.40 | 0.0% | 0.0% | 0.0% | 0/30 | 0/30 |
-| r = 0.55 | 4.0% | 4.0% | 0.0% | 0/30 | 0/30 |
-| r = 0.60 | 33.0% | 33.0% | 1.0% | 0/30 | 0/30 |
-| r = 0.65 | 78.0% | 78.0% | 24.0% | 0/30 | 0/30 |
-| r = 0.70 | 100.0% | 100.0% | 67.0% | 0/30 | 0/30 |
+<!-- RESULTS:START reservation_sweep_table -->
+| Reservation ($r$) | Midpoint Failure% ($N=100$) | Midpoint Breach% ($N=100$) | Naive Breach% ($N=100$) | Engine Agreement Rate | Engine Involuntary Breach Rate |
+|---|---|---|---|---|---|
+| $r = 0.40$ | 0.0% | 0.0% | 0.0% | 100.0% (2/2 trials) | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.55$ | 4.0% | 4.0% | 0.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.60$ | 33.0% | 33.0% | 1.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.65$ | 78.0% | 78.0% | 24.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.70$ | 100.0% | 100.0% | 67.0% | *not yet run (resume with `make benchmarks`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+<!-- RESULTS:END reservation_sweep_table -->
 
 ### Strategic Anchor Inflation Sweep
 
-| Inflation Level | Naive Baseline Price Shift | Naive Capture Rate | Midpoint Baseline Shift | Engine Bluff Flags |
-|-----------------|----------------------------|--------------------|-------------------------|--------------------|
-| +10% | +$3.00 ± $0.00 | 3.3% | +$0.00 | 0/30 |
-| +25% | +$7.50 ± $0.00 | 8.3% | +$0.00 | 0/30 |
-| +50% | +$15.00 ± $0.00 | 16.7% | +$0.00 | 0/30 |
-| +75% | +$22.50 ± $0.00 | 25.0% | +$0.00 | 0/30 |
+<!-- RESULTS:START anchor_sweep_table -->
+*Deterministic baseline arithmetic, no LLM*
+
+| Inflation Level | Stated Price Shift ($\Delta P$) | Naive Baseline Price Shift | Naive Capture Rate | Midpoint Baseline Shift |
+|---|---|---|---|---|
+| **+10%** | +$9.00 | +$3.00 ± $0.00 | 3.3% | +$0.00 (0.0% capture) |
+| **+25%** | +$22.50 | +$7.50 ± $0.00 | 8.3% | +$0.00 (0.0% capture) |
+| **+50%** | +$45.00 | +$15.00 ± $0.00 | 16.7% | +$0.00 (0.0% capture) |
+| **+75%** | +$67.50 | +$22.50 ± $0.00 | 25.0% | +$0.00 (0.0% capture) |
+<!-- RESULTS:END anchor_sweep_table -->
 
 ## Stage e: Privacy Leakage Reconstruction Probe
 
@@ -80,6 +90,8 @@ Reports cosine similarity of inferred weights to true weights, benchmarked again
 1. **Uniform Guess Baseline** (guess 1/K for each issue): Cosine ≈ 0.80 on 5-issue scenarios.
 2. **Random Dirichlet Baseline** (random probability vector): Cosine ≈ 0.65–0.70.
 Leakage is measured as lift over the uniform baseline: `(probe_cosine - uniform_cosine) / uniform_cosine`.
+
+*Not yet run (requires `--run_privacy_probe`)*
 
 ## Stage f: Custom Scenario Checks (illustrative, N=3, NOT a benchmark)
 
@@ -115,4 +127,4 @@ python -m scenarios.from_text --text "<scenario description>" --rounds 3 --proto
 ### Check 4: Deliberately Infeasible Dispute (Reservation 0.95 each)
 **Description**: *"PartyA and PartyB negotiate over transaction price ($10 to $100). PartyA refuses any deal giving less than 95% of the total surplus (reservation 0.95), and PartyB also strictly refuses any deal giving less than 95% of total surplus (reservation 0.95)."*
 - **Feasible**: NO (Impasse detected)
-- **Feasibility Warning**: ["Added second issue 'price_change_percentage' not explicitly mentioned; assumption made for trade-off.", 'Ideal values inferred; not specified by user.', 'Feasibility Warning: No deal can satisfy everyone as parsed (joint reservation surplus = -0.245 < 0). Consider lowering reservation thresholds or adjusting ideals before negotiating.']
+- **Feasibility Warning**: ["Added second issue 'price_change_percentage' not explicitly mentioned; assumption made for trade-off.", 'Ideal values inferred; not specified by user.', 'Feasibility Warning: No deal can satisfy everyone as parsed (joint reservation surplus = -0.450 < 0). Consider lowering reservation thresholds or adjusting ideals before negotiating.']
