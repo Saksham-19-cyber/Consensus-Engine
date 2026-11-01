@@ -4,13 +4,13 @@ A high-performance, data-dense Next.js dashboard for multi-agent autonomous nego
 
 ---
 
-## 🚀 Deployment Architecture & Split
+## 🚀 Deployment Architecture
 
-Consensus Engine is architected as a **decoupled client-server deployment**:
+Consensus Engine web frontend is deployed on **Vercel**:
 
 ```
 ┌──────────────────────────────────────┐       ┌──────────────────────────────────────┐
-│        Vercel (Edge / CDN)           │       │    Render / Railway / Fly.io Host    │
+│        Vercel (Edge / CDN)           │       │          Backend API Service         │
 │                                      │ HTTP  │                                      │
 │  Next.js 15 App Router Frontend      │──────▶│  FastAPI + LangGraph Orchestrator    │
 │  - Interactive Negotiation Runner    │  & WS │  - ChromaDB Vector Store             │
@@ -20,9 +20,8 @@ Consensus Engine is architected as a **decoupled client-server deployment**:
 └──────────────────────────────────────┘       └──────────────────────────────────────┘
 ```
 
-### Why This Split is Necessary
 * **Frontend (`/web`)**: Deploys as a standard Next.js application on **Vercel** with global CDN caching and client-side rendering for rich Recharts visualisations.
-* **Backend (`src/api`)**: Runs **LangGraph negotiation graphs**, SQLite session persistence, persistent ChromaDB precedent memory, and multi-round iterative Groq LLM queries. Because negotiation runs can exceed serverless execution limits (taking 15–45s across 10 rounds), **the backend cannot run as Vercel serverless functions** and must be deployed on a service supporting long-lived stateful processes (e.g., Render, Railway, or Fly.io).
+* **Backend**: Communicates with the FastAPI backend via `NEXT_PUBLIC_API_URL`.
 
 ---
 
@@ -58,5 +57,5 @@ Open [http://localhost:3000](http://localhost:3000) to view the UI.
 2. In the [Vercel Dashboard](https://vercel.com/new), import the repository.
 3. Set **Root Directory** to `web`.
 4. In **Environment Variables**, add:
-   - `NEXT_PUBLIC_API_URL`: Your deployed FastAPI backend URL (e.g. `https://consensus-engine-api.onrender.com`).
+   - `NEXT_PUBLIC_API_URL`: Your deployed FastAPI backend URL.
 5. Click **Deploy**.

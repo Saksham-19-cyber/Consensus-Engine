@@ -1,12 +1,3 @@
----
-title: Consensus Engine API
-emoji: 🤝
-colorFrom: blue
-colorTo: purple
-sdk: docker
-pinned: false
----
-
 <div align="center">
 
 <img src="assets/banner.jpg" alt="Consensus Engine — Multi-Agent Negotiation Under Private Information" width="100%"/>
@@ -691,7 +682,7 @@ Consensus Engine provides two dedicated frontend interfaces for exploring multi-
 |---|---|---|---|
 | **Production Research Web App** | Next.js 15, TypeScript, Tailwind, Recharts | Interactive runner, 95% bootstrap CI charts, privacy probe simplex visualizer, JSONL trial explorer | **[consensus-engine-opal.vercel.app](https://consensus-engine-opal.vercel.app/)** <br> *(Local: `http://localhost:3000`)* |
 | **Streamlit Analytics Dashboard** | Streamlit, Python, Requests | Rapid local experimentation, session playback, parameter sweeps | **[consensus-engine.streamlit.app](https://consensus-engine-y9ybfxmfwcmopgobfzzpjx.streamlit.app/)** <br> *(Local: `http://localhost:8501`)* |
-| **FastAPI Orchestration Backend** | FastAPI, LangGraph, ChromaDB, Groq | Agent graph execution, SQLite audit persistence, precedent memory | **[consensus-engine-api.onrender.com](https://consensus-engine-api.onrender.com)** <br> *(Local: `http://localhost:8000`)* |
+| **FastAPI Orchestration Backend** | FastAPI, LangGraph, ChromaDB, Groq | Agent graph execution, SQLite audit persistence, precedent memory | **[API Docs](/docs)** <br> *(Local: `http://localhost:8000`)* |
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSaksham-19-cyber%2FConsensus-Engine&root-directory=web)
 
@@ -729,50 +720,44 @@ streamlit run frontend/app.py
 
 ---
 
-### 🌐 Decoupled Deployment Architecture
+### 🌐 Deployment on Vercel
 
 ```
 ┌───────────────────────────────────────┐       ┌────────────────────────────────────────┐
-│         Vercel (Global Edge)          │       │     Render / Railway / Fly.io Host     │
+│         Vercel (Global Edge)          │       │         FastAPI Backend Engine         │
 │                                       │ HTTP  │                                        │
-│  Next.js 15 App Router Frontend       │──────▶│   FastAPI Orchestrator (Long-Lived)    │
+│  Next.js 15 App Router Frontend       │──────▶│   FastAPI Orchestrator                 │
 │  - Recharts Empirical Dashboards      │  & WS │   - LangGraph Agent DAG Execution      │
 │  - Privacy Probe Simplex Visualizer   │       │   - Persistent ChromaDB Memory         │
 │  - JSONL Trial Record Explorer        │       │   - SQLite Audit Storage & Groq Loop   │
 └───────────────────────────────────────┘       └────────────────────────────────────────┘
 ```
 
-> ⚠️ **Why This Split is Required**:
-> The Next.js frontend (`/web`) deploys seamlessly to **Vercel**. However, multi-round LLM negotiation graphs (10 rounds across 3–5 agents) require 15–45 seconds of stateful execution, persistent ChromaDB vector storage, and SQLite transaction logs. **The FastAPI backend cannot run inside Vercel serverless functions** and must be deployed on a platform supporting persistent processes (Render, Railway, or Fly.io).
-
-#### Backend Deployment (Render / Railway)
-1. Deploy the repository root using the Dockerfile or Python environment:
-   ```bash
-   uvicorn src.api.main:app --host 0.0.0.0 --port 8000
-   ```
-2. Set environment variables on your backend host:
-   ```env
-   GROQ_API_KEY=your_groq_api_key
-   ```
-
 #### Frontend Deployment (Vercel)
-1. Click the **Deploy with Vercel** button above or import the repository in [Vercel](https://vercel.com/new).
+1. Import the repository in [Vercel](https://vercel.com/new).
 2. Set **Root Directory** to `web`.
-3. Add the environment variable:
+3. In **Environment Variables**, configure:
    ```env
-   NEXT_PUBLIC_API_URL=https://your-consensus-engine-backend.onrender.com
+   NEXT_PUBLIC_API_URL=https://your-backend-api-url
    ```
 4. Deploy to receive your live `https://<your-project>.vercel.app` URL.
 
-#### ⚠️ Troubleshooting: "Failed to fetch" on Vercel
+#### Backend Entrypoint
+The backend API exposes a clean ASGI application entrypoint in `app.py` (`from src.api.main import app`) and can be run locally or hosted with:
+```bash
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+```
+Required environment variable:
+```env
+GROQ_API_KEY=your_groq_api_key
+```
 
-If clicking "Parse Scenario" or running a negotiation returns `"Failed to fetch"`, the browser's JavaScript was unable to establish a network connection with the backend. This is almost always caused by one of three reasons:
+#### Troubleshooting: "Failed to fetch" on Vercel
 
-1. **`NEXT_PUBLIC_API_URL` was not present during build:** Next.js bakes `NEXT_PUBLIC_*` environment variables directly into client-side static bundles at **build time**. If the variable was unset when Vercel built the project, it falls back to `http://localhost:8000`. The browser on `https://<your-app>.vercel.app` then either attempts to reach your local machine or blocks the request as Mixed Content (HTTPS calling HTTP).
-   * **Fix:** In Vercel Project Settings → **Environment Variables**, ensure `NEXT_PUBLIC_API_URL` is set to your live backend (e.g. `https://your-backend.onrender.com` without trailing slash), then go to **Deployments** → **Redeploy** (checking **"Clear Build Cache"**).
-2. **Render free-tier service is sleeping (cold start):** Render's free tier spins down web services after 15 minutes of idle time. The initial wake-up request can take 30–60 seconds while the container boots. If the frontend requests a parse before the backend is warm, the connection may drop.
-   * **Fix:** Open `https://your-backend.onrender.com/docs` in a new browser tab to trigger the wake-up. Once Swagger UI loads, retry the parse in the web UI. Notice the navbar indicator in the Next.js UI: an amber dot ("Demo Mode") means the backend health check is failing or sleeping; a green pulsing dot ("API Online") confirms the backend is ready.
-3. **CORS and URL scheme:** The FastAPI backend is configured with Starlette `CORSMiddleware` (`allow_origins=["*"]`, `allow_credentials=True`), which dynamically mirrors incoming Vercel HTTPS origins. Ensure your `NEXT_PUBLIC_API_URL` uses `https://` (matching the Vercel frontend origin) and does not contain typos or trailing slashes.
+If clicking "Parse Scenario" or running a negotiation returns `"Failed to fetch"`, verify:
+
+1. **`NEXT_PUBLIC_API_URL` during build:** Next.js bakes `NEXT_PUBLIC_*` environment variables into client-side static bundles at **build time**. Ensure `NEXT_PUBLIC_API_URL` is set in Vercel Project Settings → **Environment Variables** (without trailing slash), then trigger a redeploy with **"Clear Build Cache"**.
+2. **CORS and URL scheme:** The FastAPI backend is configured with Starlette `CORSMiddleware` (`allow_origins=["*"]`, `allow_credentials=True`), dynamically mirroring incoming Vercel HTTPS origins. Ensure your `NEXT_PUBLIC_API_URL` uses `https://` matching your frontend origin.
 
 ---
 
