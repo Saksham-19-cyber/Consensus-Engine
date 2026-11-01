@@ -1,5 +1,4 @@
-# Exclude frontend, tests, docs, assets, and local data from Python serverless bundle
-web/
+# Exclude tests, docs, assets, and local data from serverless bundle
 tests/
 assets/
 node_modules/
