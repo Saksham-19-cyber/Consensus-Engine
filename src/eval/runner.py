@@ -24,7 +24,12 @@ import numpy as np
 
 from src.models.utility import StakeholderProfile
 from src.models.evaluation import TrialResult, ParetoMetrics, FairnessMetrics, EvalReport, PrivacyMetrics
-from src.eval.pareto import compute_pareto_frontier, pareto_distance, pareto_efficiency_ratio
+from src.eval.pareto import (
+    compute_pareto_frontier,
+    pareto_distance,
+    pareto_efficiency_ratio,
+    utilitarian_welfare_ratio,
+)
 from src.eval.fairness import compute_fairness_metrics
 from src.eval.baselines import compute_baseline
 from src.eval.log_writer import TrialLogWriter
@@ -155,12 +160,13 @@ def evaluate_outcome(
 
     frontier = compute_pareto_frontier(utility_functions, issues, resolution=resolution)
     dist = pareto_distance(outcome_u, frontier) if len(frontier) > 0 else float("inf")
-    ratio = pareto_efficiency_ratio(outcome_u, frontier) if len(frontier) > 0 else 0.0
+    ratio = utilitarian_welfare_ratio(outcome_u, frontier) if len(frontier) > 0 else 0.0
     is_optimal = dist < 0.05
 
     pareto = ParetoMetrics(
         distance_to_frontier=round(dist, 4),
         efficiency_ratio=round(ratio, 4),
+        utilitarian_welfare_ratio=round(ratio, 4),
         is_pareto_optimal=is_optimal,
         social_welfare=round(float(np.sum(outcome_u)), 4),
     )
@@ -433,6 +439,8 @@ def aggregate_results(
             "mean_pareto_ratio": round(float(np.mean(pareto_ratios)), 4) if pareto_ratios else 0.0,
             "std_pareto_ratio": round(float(np.std(pareto_ratios)), 4) if pareto_ratios else 0.0,
             "ci95_pareto_ratio": ci_pareto,
+            "mean_utilitarian_welfare_ratio": round(float(np.mean(pareto_ratios)), 4) if pareto_ratios else 0.0,
+            "ci95_utilitarian_welfare_ratio": ci_pareto,
             "mean_distance_to_frontier": round(float(np.mean(distances)), 4) if distances else 0.0,
             "ci95_distance_to_frontier": ci_distance,
             "mean_nash_welfare": round(float(np.mean(nash_welfares)), 4) if nash_welfares else 0.0,

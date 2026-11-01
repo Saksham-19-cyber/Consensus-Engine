@@ -83,9 +83,14 @@ def pareto_distance(
     return float(np.min(distances))
 
 
-def pareto_efficiency_ratio(
+def utilitarian_welfare_ratio(
     outcome_utilities: np.ndarray, frontier: np.ndarray
 ) -> float:
+    """
+    Computes the utilitarian welfare ratio: sum(outcome_utilities) / max_{f in frontier} sum(f).
+    Note: Almost any non-trivial proposal scores above 0.9 on this metric, so distance_to_frontier
+    and Nash social welfare should be preferred as headline efficiency metrics.
+    """
     if len(frontier) == 0:
         return 0.0
     outcome_welfare = float(np.sum(outcome_utilities))
@@ -94,6 +99,10 @@ def pareto_efficiency_ratio(
     if max_welfare == 0:
         return 0.0
     return min(1.0, outcome_welfare / max_welfare)
+
+
+# Backward compatibility alias
+pareto_efficiency_ratio = utilitarian_welfare_ratio
 
 
 def find_optimal_proposal(

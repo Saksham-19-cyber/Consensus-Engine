@@ -5,7 +5,8 @@ from typing import Optional
 
 class ParetoMetrics(BaseModel):
     distance_to_frontier: float = 0.0
-    efficiency_ratio: float = 0.0
+    efficiency_ratio: float = 0.0  # Legacy alias for utilitarian_welfare_ratio
+    utilitarian_welfare_ratio: float = 0.0
     is_pareto_optimal: bool = False
     social_welfare: float = 0.0
 

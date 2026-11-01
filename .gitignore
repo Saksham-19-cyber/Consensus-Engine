@@ -7,3 +7,4 @@ __pycache__/
 .next/
 node_modules/
 data/
+*.egg-info/

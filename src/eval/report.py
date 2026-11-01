@@ -48,8 +48,8 @@ def generate_markdown_report(
         "",
         "## Summary by Method",
         "",
-        "| Method | Agree% | Pareto Ratio (95% CI) | Nash Welfare (95% CI) | Min Util | Gini | Rounds | Privacy Cosine |",
-        "|--------|--------|----------------------|----------------------|---------|------|--------|----------------|",
+        "| Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Privacy Cosine |",
+        "|--------|--------|---------------------------|-----------------------|---------------------------|---------|------|--------|----------------|",
     ]
 
     for method, stats in sorted(summary.items()):
@@ -57,8 +57,13 @@ def generate_markdown_report(
         wilcoxon_pareto = stats.get("wilcoxon_pareto_vs_engine")
         sig = _sig_marker(wilcoxon_pareto) if method != engine_method else "(engine)"
 
-        pareto_str = _ci_str(stats["mean_pareto_ratio"], stats.get("ci95_pareto_ratio"))
+        dist_str = _ci_str(
+            stats.get("mean_distance_to_frontier", 0.0),
+            stats.get("ci95_distance_to_frontier"),
+        )
         nash_str = _ci_str(stats["mean_nash_welfare"], stats.get("ci95_nash_welfare"))
+        utilitarian_ratio = stats.get("mean_utilitarian_welfare_ratio", stats.get("mean_pareto_ratio", 0.0))
+        util_str = f"{utilitarian_ratio:.3f}"
 
         privacy_str = (
             f"{stats['mean_privacy_cosine']:.3f}"
@@ -69,8 +74,9 @@ def generate_markdown_report(
         lines.append(
             f"| {method} {sig} "
             f"| {stats['agreement_rate']:.1%} "
-            f"| {pareto_str} "
+            f"| {dist_str} "
             f"| {nash_str} "
+            f"| {util_str} "
             f"| {stats['mean_min_utility']:.3f} "
             f"| {stats['mean_gini']:.3f} "
             f"| {stats['mean_rounds']:.1f} "
@@ -79,16 +85,34 @@ def generate_markdown_report(
 
     lines.extend(["", "## Key Findings", ""])
 
-    # Best methods
+    # Headline: Best Distance to Frontier (closest to Pareto efficiency)
+    methods_sorted_dist = sorted(
+        summary.items(),
+        key=lambda x: x[1].get("mean_distance_to_frontier", float("inf")),
+    )
+    if methods_sorted_dist:
+        best_d = methods_sorted_dist[0]
+        lines.append(
+            f"- **Best Distance to Frontier (closest to Pareto optimal)**: "
+            f"{best_d[0]} ({best_d[1].get('mean_distance_to_frontier', 0.0):.3f})"
+        )
+
+    # Headline: Best Nash Welfare
     methods_sorted = sorted(summary.items(), key=lambda x: x[1]["mean_nash_welfare"], reverse=True)
     if methods_sorted:
         best = methods_sorted[0]
         lines.append(f"- **Best Nash Welfare**: {best[0]} ({best[1]['mean_nash_welfare']:.3f})")
 
-    methods_sorted_pareto = sorted(summary.items(), key=lambda x: x[1]["mean_pareto_ratio"], reverse=True)
-    if methods_sorted_pareto:
-        best_p = methods_sorted_pareto[0]
-        lines.append(f"- **Best Pareto Ratio**: {best_p[0]} ({best_p[1]['mean_pareto_ratio']:.3f})")
+    # Secondary: Utilitarian welfare ratio
+    methods_sorted_util = sorted(
+        summary.items(),
+        key=lambda x: x[1].get("mean_utilitarian_welfare_ratio", x[1].get("mean_pareto_ratio", 0.0)),
+        reverse=True,
+    )
+    if methods_sorted_util:
+        best_u = methods_sorted_util[0]
+        val = best_u[1].get("mean_utilitarian_welfare_ratio", best_u[1].get("mean_pareto_ratio", 0.0))
+        lines.append(f"- **Highest Utilitarian Welfare Ratio**: {best_u[0]} ({val:.3f})")
 
     methods_sorted_fair = sorted(summary.items(), key=lambda x: x[1]["mean_gini"])
     if methods_sorted_fair:
