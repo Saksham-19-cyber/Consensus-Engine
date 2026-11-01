@@ -67,7 +67,7 @@ After each session, a **reconstruction probe LLM** reads the full dialogue trans
 
 $$\text{LeakScore}_i = \text{CosineSim}\left(\mathbf{w}_i,\ \hat{\mathbf{w}}_i\right)$$
 
-The random baseline for $K$ issues is $\approx \frac{1}{\sqrt{K}}$ (e.g. **0.45 for 5 issues**). A score of 0.45 represents zero leakage, while 1.0 represents total disclosure. This is the first negotiation framework to **empirically measure** privacy rather than merely assert it architecturally — revealing that while architectural isolation prevents raw data disclosure, natural-language negotiation inherently leaks ~83% of preference geometry.
+Reference baselines are computed for comparison: a uniform-guess baseline (which averages ~0.80 for non-negative normalized weights on 5 issues) and a random Dirichlet baseline. Leakage is reported both as absolute cosine similarity and as lift over the uniform baseline. The framework empirically tests behavioral leakage across both public dialogue and transcripts containing private reasoning metadata.
 
 ### 3 · Mediator Bluff Detection
 The mediator maintains a rolling window of `(satisfaction_score, concession_willingness)` tuples per agent. Agents with persistently low satisfaction **and** low concession willingness are flagged as potential bluffers. Their names are injected into the revision prompt, causing the mediator to conserve concession budget until deadline pressure forces genuine signalling.
@@ -326,10 +326,10 @@ LogiTrans  (Logistics Provider): honesty=0.81, reservation=0.35  [MODERATE CONCE
 
 A central architectural pillar of multi-agent negotiation frameworks is **structural privacy**: raw utility functions, numeric weights, and reservation thresholds are never passed across agents or transmitted in message payloads.
 
-However, our post-hoc **reconstruction probe reveals a critical research finding: severe behavioral leakage**. An external observer with access solely to the natural-language dialogue transcript reconstructed the agents' private utility weight profiles with an average **cosine similarity of 0.8312 against a random baseline of 0.4472** ($1/\sqrt{5}$ for 5 issues):
+However, our post-hoc **reconstruction probe evaluates behavioral leakage** against empirical baselines: a uniform guess (which scores ~0.80 cosine similarity for non-negative normalized weights on 5 issues) and a random Dirichlet baseline. Leakage is measured as lift over the uniform baseline:
 
-> ⚠️ **Key Research Finding — Natural Language Leaks Preference Geometry:**  
-> A score of **0.8312** (where 0.45 is zero leakage and 1.0 is total disclosure) demonstrates that the dialogue leaked the great majority of each agent's true preference structure. Because negotiation requires justifying trade-offs ("*I cannot accept 20-day delivery unless price drops*"), natural language inherently exposes weight priorities. **Structural isolation prevents raw data extraction, but behavioral leakage remains high.**
+> ⚠️ **Key Research Finding — Evaluating Behavioral Disclosure:**  
+> The probe assesses how much additional preference structure is disclosed beyond reference baselines. Because negotiation requires communicating trade-offs ("*I cannot accept 20-day delivery unless price drops*"), natural language can expose weight priorities even when raw parameters are never transmitted.
 
 ```json
 {

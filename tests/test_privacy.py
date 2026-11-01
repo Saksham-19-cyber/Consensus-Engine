@@ -129,7 +129,10 @@ class TestMeasurePrivacyLeakage:
             self._make_profile("Alice", TRUE_WEIGHTS["Alice"]),
             self._make_profile("Bob", TRUE_WEIGHTS["Bob"]),
         ]
-        metrics = measure_privacy_leakage(transcript=[], profiles=profiles, issues=ISSUES)
+        fake_transcript = [
+            {"role": "stakeholder", "agent_name": "Alice", "content": "I care about price.", "round_number": 1}
+        ]
+        metrics = measure_privacy_leakage(transcript=fake_transcript, profiles=profiles, issues=ISSUES)
 
         assert isinstance(metrics, PrivacyMetrics)
         assert 0.0 <= metrics.mean_cosine_similarity <= 1.0
@@ -141,15 +144,70 @@ class TestMeasurePrivacyLeakage:
 
     @patch("src.eval.privacy.plain_completion")
     def test_handles_llm_failure_gracefully(self, mock_completion):
-        """Should fall back to uniform weights and still return PrivacyMetrics."""
+        """Should NOT silently fall back to uniform weights; must mark probe_failed and report failure_count."""
         mock_completion.side_effect = Exception("LLM unavailable")
 
         profiles = [self._make_profile("Alice", TRUE_WEIGHTS["Alice"])]
-        metrics = measure_privacy_leakage(transcript=[], profiles=profiles, issues=ISSUES)
+        fake_transcript = [
+            {"role": "stakeholder", "agent_name": "Alice", "content": "I care about price.", "round_number": 1}
+        ]
+        metrics = measure_privacy_leakage(transcript=fake_transcript, profiles=profiles, issues=ISSUES)
 
         assert isinstance(metrics, PrivacyMetrics)
-        # With uniform fallback, cosine should be in [0, 1]
-        assert 0.0 <= metrics.mean_cosine_similarity <= 1.0
+        assert metrics.probe_failed is True
+        assert metrics.failure_count == 1
+        assert metrics.mean_cosine_similarity is None
+        assert metrics.lift_over_uniform is None
+
+    def test_reference_baselines(self):
+        """Test calculation of uniform and Dirichlet reference baselines."""
+        from src.eval.privacy import compute_reference_baselines
+        # For business deal style weights, uniform cosine should be roughly ~0.80
+        uniform_base, dirichlet_base = compute_reference_baselines(TRUE_WEIGHTS, ISSUES, n_samples=500, seed=42)
+        assert 0.60 <= uniform_base <= 0.99
+        assert 0.60 <= dirichlet_base <= 0.99
+
+    @patch("src.eval.privacy.plain_completion")
+    def test_dual_variant_public_vs_reasoning(self, mock_completion):
+        """Verify both public_transcript and with_reasoning variants are evaluated."""
+        captured_prompts = []
+
+        def fake_completion(*args, **kwargs):
+            messages = kwargs.get("messages", [])
+            user_msg = next((m["content"] for m in messages if m.get("role") == "user"), "")
+            captured_prompts.append(user_msg)
+            return json.dumps({
+                "Alice": TRUE_WEIGHTS["Alice"],
+                "Bob": TRUE_WEIGHTS["Bob"],
+            })
+
+        mock_completion.side_effect = fake_completion
+
+
+        profiles = [
+            self._make_profile("Alice", TRUE_WEIGHTS["Alice"]),
+            self._make_profile("Bob", TRUE_WEIGHTS["Bob"]),
+        ]
+        transcript = [
+            {
+                "role": "stakeholder",
+                "agent_name": "Alice",
+                "content": "Public text: I want lower price.",
+                "round_number": 1,
+                "metadata": {"reasoning": "Private thoughts: price is 60% of my score."},
+            }
+        ]
+
+        metrics = measure_privacy_leakage(transcript=transcript, profiles=profiles, issues=ISSUES)
+        assert metrics.public_transcript is not None
+        assert metrics.with_reasoning is not None
+        assert metrics.probe_failed is False
+        assert metrics.lift_over_uniform is not None
+
+        # Verify that prompt 1 (public) did not contain private reasoning, and prompt 2 did
+        assert len(captured_prompts) == 2
+        assert "Private thoughts" not in captured_prompts[0]
+        assert "Private thoughts" in captured_prompts[1]
 
     @patch("src.eval.privacy.plain_completion")
     def test_high_similarity_when_perfectly_inferred(self, mock_completion):
@@ -176,3 +234,4 @@ class TestMeasurePrivacyLeakage:
         )
         # After normalization, inferred weights should closely match true weights
         assert metrics.mean_cosine_similarity > 0.90
+

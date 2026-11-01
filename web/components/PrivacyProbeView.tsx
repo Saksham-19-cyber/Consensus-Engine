@@ -131,8 +131,8 @@ export const PrivacyProbeView: React.FC = () => {
           </p>
           <p>
             Prior multi-agent frameworks assert privacy &ldquo;by design&rdquo; because raw utility weights are never sent over the wire.
-            Our reconstruction probe proves this claim is false: even under strict architectural isolation, natural language
-            negotiation statements inherently leak <span className="text-zinc-100 font-mono font-bold">~83% of internal preference geometry</span> (cosine similarity = 0.831 vs random floor 0.447). Each critique acts as a geometric projection of the stakeholder&apos;s gradient.
+            Our reconstruction probe tests this claim: even under architectural isolation, natural language
+            negotiation statements can leak weight priorities. The probe evaluates reconstruction fidelity against reference baselines (uniform guess and random Dirichlet distribution) to quantify lift over baseline.
           </p>
         </div>
       </div>

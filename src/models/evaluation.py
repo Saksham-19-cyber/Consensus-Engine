@@ -19,25 +19,34 @@ class FairnessMetrics(BaseModel):
     utility_spread: float = 0.0
 
 
+class PrivacyVariantMetrics(BaseModel):
+    mean_cosine_similarity: Optional[float] = None
+    lift_over_uniform: Optional[float] = None
+    mean_kl_divergence: Optional[float] = None
+    per_agent_leakage: dict[str, dict[str, float]] = Field(default_factory=dict)
+    failure_count: int = 0
+    probe_failed: bool = False
+
+
 class PrivacyMetrics(BaseModel):
     """
     Empirical privacy leakage scores from the post-hoc reconstruction probe.
-
-    mean_cosine_similarity: Average cosine similarity between inferred and true
-        utility weights across all agents. Ranges [0, 1].
-        - Near random baseline (~0.5–0.6 for 5 equally-weighted issues) = good privacy
-        - Near 1.0 = transcript fully revealed agent preferences
-
-    mean_kl_divergence: KL divergence D(true || inferred), averaged across agents.
-        Higher values indicate better privacy (inferred is further from truth).
-
-    per_agent_leakage: Per-agent {cosine_similarity, kl_divergence, leakage_score}
+    Tracks two reference baselines (uniform-guess cosine and random-Dirichlet-guess cosine)
+    and reports leakage as lift over uniform baseline.
+    Tracks both public transcript and transcript with reasoning metadata.
     """
-    mean_cosine_similarity: float = 0.0
-    mean_kl_divergence: float = 0.0
+    mean_cosine_similarity: Optional[float] = None
+    mean_kl_divergence: Optional[float] = None
     per_agent_leakage: dict[str, dict[str, float]] = Field(default_factory=dict)
     n_agents: int = 0
     n_issues: int = 0
+    uniform_baseline_cosine: float = 0.0
+    dirichlet_baseline_cosine: float = 0.0
+    lift_over_uniform: Optional[float] = None
+    failure_count: int = 0
+    probe_failed: bool = False
+    public_transcript: Optional[PrivacyVariantMetrics] = None
+    with_reasoning: Optional[PrivacyVariantMetrics] = None
 
 
 class TrialResult(BaseModel):
