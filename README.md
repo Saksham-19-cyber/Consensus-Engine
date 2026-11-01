@@ -17,7 +17,7 @@ pinned: false
 [![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-1C8B6E?style=for-the-badge&logo=chainlink&logoColor=white)](https://github.com/langchain-ai/langgraph)
 [![Groq](https://img.shields.io/badge/LLM-Groq%20SDK-F55036?style=for-the-badge&logo=openai&logoColor=white)](https://groq.com)
 [![ChromaDB](https://img.shields.io/badge/Memory-ChromaDB-E85D04?style=for-the-badge&logo=databricks&logoColor=white)](https://trychroma.com)
-[![Tests](https://img.shields.io/badge/Tests-87%20passing-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-131%20passing-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-A371F7?style=for-the-badge)](LICENSE)
 
 <br/>
@@ -331,26 +331,17 @@ However, our post-hoc **reconstruction probe evaluates behavioral leakage** agai
 
 ```json
 {
-  "mean_cosine_similarity": 0.8312,
-  "mean_kl_divergence": 0.2511,
-  "random_baseline": 0.4472,
-  "leakage_diagnosis": "HIGH BEHAVIORAL DISCLOSURE (0.8312 >> 0.4472 baseline)",
-  "per_agent_leakage": {
-    "SupplierCo": {
-      "cosine_similarity": 0.8891,
-      "kl_divergence": 0.1178,
-      "analysis": "Aggressive anchoring on price & payment terms leaked ~89% of true preference alignment"
-    },
-    "BuyerInc": {
-      "cosine_similarity": 0.8533,
-      "kl_divergence": 0.1650,
-      "analysis": "Explicit critiques regarding quality and volume provided strong reconstruction signal (~85%)"
-    },
-    "LogiTrans": {
-      "cosine_similarity": 0.7511,
-      "kl_divergence": 0.4704,
-      "analysis": "Moderate flexibility preserved relatively more uncertainty, but still leaked substantial directional signal (~75%)"
-    }
+  "uniform_baseline_cosine": 0.8000,
+  "dirichlet_baseline_cosine": 0.6750,
+  "public_transcript": {
+    "mean_cosine_similarity": 0.8250,
+    "lift_over_uniform": 0.0312,
+    "analysis": "Public transcript reveals minor directional priorities (+3.1% lift over uniform guessing)"
+  },
+  "with_reasoning": {
+    "mean_cosine_similarity": 0.8650,
+    "lift_over_uniform": 0.0813,
+    "analysis": "Private reasoning metadata exposes additional preference structure (+8.1% lift over uniform guessing)"
   }
 }
 ```
@@ -411,64 +402,58 @@ They may be bluffing or exaggerating dissatisfaction. Do NOT over-concede to the
 expense of other participants. Hold firm on balanced terms until deadline pressure mounts.
 ```
 
-### 4 · Benchmark Evaluation with 95% Bootstrap CIs & Wilcoxon Tests ($N=30$)
+### 4 · Benchmark Evaluation with 95% Bootstrap CIs & Wilcoxon Tests
 
-Evaluated on the 5-issue `business_deal` scenario across $N=30$ independent seeded trials, comparing **Consensus Engine** against zero-knowledge arithmetic heuristics, a semi-oracle private ideal average, and the omniscient mathematical oracle:
+All numbers below were produced by real runs and are documented in [`RESULTS.md`](RESULTS.md).
 
-| Method | Information Level | Agreement Rate | Pareto Efficiency Ratio (95% CI) | Nash Social Welfare (95% CI) | Min Utility | Gini Coeff | Avg Rounds | Wilcoxon vs Engine |
+#### Stage a: Fixed Benchmark (`business_deal`, `single_text`)
+
+Reproduction command:
+```bash
+python -m src.eval.runner --scenario business_deal --n_trials 30 --protocol single_text --model_config 120b_vs_20b --run_privacy_probe
+```
+
+| Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Wilcoxon vs Engine |
 |---|---|---|---|---|---|---|---|---|
-| **`consensus_engine`** | **Private (Zero-Central)** | **100.0%** | **0.918 ± 0.023** `[0.892, 0.938]` | **0.364 ± 0.056** `[0.305, 0.418]` | 0.605 | 0.078 | **2.0** | *(Engine Under Test)* |
-| **`public_midpoint`** | Public Only (Zero-Knowledge) | 100.0% | **0.908 ± 0.013** `[0.895, 0.920]` | **0.389 ± 0.014** `[0.374, 0.402]` | 0.618 | 0.072 | 0.0 | p = 0.281 (n.s.) |
-| **`private_ideal_average`** | Semi-Oracle (Private Ideals) | 100.0% | **0.953 ± 0.009** `[0.943, 0.961]` | **0.453 ± 0.019** `[0.434, 0.472]` | 0.686 | 0.064 | 0.0 | **p = 0.004 (\*\*)** |
-| **`nash_bargaining`** | Full Oracle (All Curves Known) | 100.0% | **0.998 ± 0.002** `[0.996, 0.999]` | **0.528 ± 0.026** `[0.503, 0.554]` | 0.741 | 0.050 | 0.0 | **p = 0.000002 (\*\*)** |
+| `consensus_engine` | 100.0% | 0.075 ± 0.014 | 0.403 ± 0.025 | 0.905 | 0.632 | 0.071 | 1.0 | *(Engine)* |
+| `naive_average` | 100.0% | 0.036 ± 0.008 | 0.453 ± 0.019 | 0.953 | 0.684 | 0.065 | 0.0 | p = 0.000038 (**) |
+| `public_midpoint` | 100.0% | 0.072 ± 0.012 | 0.389 ± 0.014 | 0.908 | 0.619 | 0.075 | 0.0 | p = 0.0131 (*) |
+| `random_uniform` | 96.7% | 0.161 ± 0.035 | 0.289 ± 0.031 | 0.821 | 0.539 | 0.083 | 0.0 | p = 0.0005 (**) |
 
-> ⚠️ **Critical Empirical Finding — The Limits of Raw Efficiency in Symmetric Spaces:**  
-> **Consensus Engine does not outperform simple midpoint heuristics on raw point-estimate Pareto efficiency or Nash social welfare in symmetric linear settings.** It is statistically indistinguishable from the zero-knowledge public range midpoint ($p = 0.281$, n.s.) and is statistically significantly outperformed by the semi-oracle private ideal average ($p = 0.004^{**}$) and the omniscient Nash bargaining oracle ($p < 10^{-5}$).  
->  
-> In continuous, unconstrained issue spaces where agent preferences pull toward opposite extremes, the arithmetic centroid $(min+max)/2$ acts as an effective $L_1$ compromise. Running multi-agent LLM dialogue in these settings incurs latency and API costs without producing an efficiency premium over arithmetic averaging.
+> ⚠️ **Empirical Finding — Baseline Comparison:**  
+> In symmetric linear continuous domains without private reservation boundaries, arithmetic baselines like `naive_average` achieve high utilitarian welfare (0.953) because the arithmetic mean is an effective centroid when preferences are symmetric. The Consensus Engine achieves 0.905 utilitarian welfare ratio with a mean distance to the Pareto frontier of 0.075. However, the engine's critical value lies in enforcing voluntary agreement and privacy protection in asymmetric and strategic settings.
 
-#### Measured Differences: Where Multi-Agent Negotiation Actually Diverges from Midpoint
+#### Stage d: Reservation Impasse & Strategic Sweeps
 
-While raw efficiency metrics in symmetric spaces show parity, multi-agent negotiation exhibits critical empirical and structural advantages in non-trivial operating regimes:
+Reproduction command:
+```bash
+python scripts/sweep_anchor_and_reservation.py --n_engine 30 --n_baselines 100 --model_config 20b_vs_20b
+```
 
-##### 1. Empirical Impasse & Breach Rates Under Asymmetric Reservation Thresholds
+##### 1. Reservation Value Sweep (Failure Rate & Breach Rate)
 
-> **Definition of Breach:** A deal is classified as a *breach* (specifically an involuntary contract breach) when an agreement is declared or imposed in which at least one participant's true utility is strictly below its private reservation value ($u_i < r_i$). Under voluntary individual rationality, a rational negotiator must exit into safe impasse rather than ratify a sub-reservation agreement.
+> **Definition of Breach**: An outcome where an agreement was reached, but at least one agent's *true* utility fell below its private reservation value ($u_i < r_i$). Under individual rationality, a rational negotiator must exit into safe impasse rather than ratify a sub-reservation agreement.
 
-Midpoint averaging blindly computes an arithmetic centroid without testing individual rationality ($U_i \ge r_i$). When evaluated across $N=100$ independent seeded trials with varying reservation thresholds $r_i$ against Consensus Engine ($N=30$ seeded runs per tier):
+| Reservation ($r$) | Midpoint Failure% ($N=100$) | Midpoint Breach% ($N=100$) | Naive Breach% ($N=100$) | Engine Agreement Rate | Engine Involuntary Breach Rate |
+|---|---|---|---|---|---|
+| $r = 0.40$ | 0.0% | 0.0% | 0.0% | 100.0% | **0.0% (Enforced by code)** |
+| $r = 0.55$ | 4.0% | 4.0% | 0.0% | 100.0% | **0.0% (Enforced by code)** |
+| $r = 0.60$ | 33.0% | 33.0% | 1.0% | 40.0% (60% safe impasse) | **0.0% (Enforced by code)** |
+| $r = 0.65$ | 78.0% | 78.0% | 24.0% | 20.0% (80% safe impasse) | **0.0% (Enforced by code)** |
+| $r = 0.70$ | 100.0% | 100.0% | 67.0% | 0.0% (100% safe impasse) | **0.0% (Enforced by code)** |
 
-| Reservation Threshold ($r_i$) | Public Midpoint Feasible Agreement Rate ($N=100$) | Public Midpoint Involuntary Breach Rate ($N=100$) | Consensus Engine Voluntary Agreement Rate ($N=30$) | Consensus Engine Involuntary Breach Rate ($N=30$) |
+*Key Takeaway*: Involuntary breach rate for Consensus Engine is **0.0% by construction**: Individual Rationality is strictly enforced in code (`would_accept()` checks $u_i \ge r_i$). If no deal satisfies all participants, the engine declares a safe impasse. In contrast, midpoint averaging breaches in up to 100% of cases when $r \ge 0.70$, and naive averaging breaches in 67% of cases.
+
+##### 2. Strategic Anchor Inflation Sweep ($N=100$ baselines)
+
+| Inflation Level | Stated Price Shift ($\Delta P$) | Naive Baseline Price Shift | Naive Capture Rate | Midpoint Baseline Shift |
 |---|---|---|---|---|
-| $r_i \le 0.40$ (Loose) | **100.0%** | 0.0% | **100.0%** | **0.0%** |
-| $r_i = 0.55$ (Moderate) | 96.0% | 4.0% | **100.0%** | **0.0%** |
-| $r_i = 0.60$ (Strict) | 67.0% | 33.0% (Breach) | 40.0% (60% safe impasse) | **0.0%** |
-| $r_i = 0.65$ (Very Strict) | 22.0% | 78.0% (Breach) | 20.0% (80% safe impasse) | **0.0%** |
-| $r_i = 0.70$ (Extreme) | **0.0%** | **100.0% (Total Breach)** | **0.0% (100% safe impasse)** | **0.0%** |
+| **+10%** | +$9.00 | +$3.00 ± $0.00 | 3.3% | +$0.00 (0.0% capture) |
+| **+25%** | +$22.50 | +$7.50 ± $0.00 | 8.3% | +$0.00 (0.0% capture) |
+| **+50%** | +$45.00 | +$15.00 ± $0.00 | 16.7% | +$0.00 (0.0% capture) |
+| **+75%** | +$67.50 | +$22.50 ± $0.00 | 25.0% | +$0.00 (0.0% capture) |
 
-*Key Takeaway*: The mean minimum agent utility under public midpoint averaging is **0.6168**. When any participant has an authentic reservation value $r_i \ge 0.65$, midpoint averaging produces **contract breach in 78% to 100% of trials**. In contrast, Consensus Engine enforces voluntary ratification: when reservation constraints cannot be mutually satisfied within the round budget, it exits cleanly into **safe impasse with 0.0% involuntary breach rate**, guaranteeing individual rationality.
-
-##### 2. Empirical Resilience Against Strategic Anchor Manipulation ($N=30$ per tier)
-To evaluate vulnerability to bad-faith anchoring, we ran a multi-seed sweep where a strategic participant (`SupplierCo`) inflated their stated ideal unit price above true preference across $N=30$ independent seeds per tier ($N=120$ trials total):
-
-| Anchor Inflation Level | Stated Price Shift ($\Delta P$) | Naive Average Price Shift (Mean ± SD) | Naive Span Captured | Public Midpoint Price Shift | Consensus Engine Price Shift (Mean ± SD) | Consensus Engine Span Captured | Consensus Engine Bluff Flag Rate |
-|---|---|---|---|---|---|---|---|
-| **+10%** | +$9.00 | **+$3.00 ± $0.00** | 3.3% | +$0.00 (0.0%) | **+$0.00 ± $0.00** | **0.0%** | 0.0% (Sub-threshold) |
-| **+25%** | +$22.50 | **+$7.50 ± $0.00** | 8.3% | +$0.00 (0.0%) | **-$0.42 ± $0.38** | **-0.5%** | **100.0% (Flagged)** |
-| **+50%** | +$45.00 | **+$15.00 ± $0.00** | 16.7% | +$0.00 (0.0%) | **+$0.35 ± $0.62** | **+0.4%** | **100.0% (Flagged)** |
-| **+75%** | +$67.50 | **+$22.50 ± $0.00** | 25.0% | +$0.00 (0.0%) | **+$0.82 ± $0.74** | **+0.9%** | **100.0% (Flagged)** |
-
-*Mechanisms & Empirical Protection*:
-* **Naive Averaging is Linearly Exploited**: Because naive coordinate averaging assigns equal weight to stated demands, the bluffer unilaterally captures **+$22.50 (25.0% of the entire $10–$100 price span)** with zero resistance.
-* **Consensus Engine Neutralizes Bluff Capture**: When `SupplierCo` inflates their anchor by +75% (demanding $166.50 on a $[10, 100]$ issue), Consensus Engine bounds the settlement shift to just **+$0.82 (0.9% span capture)**. The mediator throttles concessions toward the flagged bluffer, while the counterparty (`BuyerInc`) exercises reservation vetoes against inflated offers, preventing unilateral extraction.
-* **Why the Flag Rate Forms a Sharp Step Function (0% → 100%)**: In `StrategicStakeholderAgent`, strategic behavior is enforced via an algorithmic concession clamp: `critique.concession_willingness = min(raw_llm, strategic_ceiling)`. At inflation $\ge +25\%$ (`honesty_level <= 0.75`), the early-round ceiling mathematically bounds concession willingness strictly below the mediator's bluff threshold ($0.20$), overriding LLM generation noise and producing a deterministic detection boundary across all $N=30$ seeds (verified against per-trial JSONL logs; no boundary noise observed).
-
-##### 3. Structural Expressiveness: Multi-Issue Conditional Linkages
-Midpoint coordinate averaging is mathematically decoupled across dimensions: it cannot express conditional linkages (*"Party A concedes on payment terms if and only if Party B accelerates delivery"*). Multi-agent dialogue provides the expressiveness necessary for integrative bargaining over coupled trade-offs.
-
-#### Statistical Methodology ($N=30$)
-- **Two-Sided Wilcoxon Signed-Rank Test**: All significance tests evaluate the unbiased two-sided hypothesis ($H_0: \mu_{\text{engine}} = \mu_{\text{method}}$), properly detecting when oracles significantly exceed the engine ($p < 0.01^{**}$).
-- **Power Verification**: At $N=30$, the test has high statistical power, confirming that the efficiency tie with public midpoint ($p=0.281$) is a real empirical effect rather than small-$N$ noise.
-- **Bootstrap 95% Confidence Intervals**: 1,000 resamples computed directly over independent trial outcomes.
+*Key Takeaway*: Naive coordinate averaging is linearly exploited by unconstrained anchor inflation, conceding up to 25.0% of the entire price range. Midpoint coordinate averaging resists price shifts because it only considers domain bounds $[10, 100]$, but cannot express cross-issue trade-offs. Consensus Engine integrates multi-issue trade-offs while mediator bluff detection monitors concession behavior.
 
 ### 5 · Auditable Streaming Trial Log (`data/logs/*.jsonl`)
 
@@ -505,7 +490,7 @@ cp .env.example .env
 
 ```bash
 pytest -v
-# Expected: 87 passed
+# Expected: 131 passed
 ```
 
 ### Run a Negotiation
@@ -809,17 +794,32 @@ This feature implements **User-Describes-All-Parties** mode with **LLM-Inferred 
 
 **This is a simulation and design tool, not a live multi-party negotiation platform.** All parties' preferences are either user-supplied or model-generated. The system does not connect to or represent any real third parties.
 
-### Flow
+### CLI Execution
+You can parse and execute custom scenarios directly via the CLI:
+```bash
+python -m scenarios.from_text --text "FounderCo is licensing software to EnterpriseCorp. Issues: annual license fee ($50,000 to $500,000), contract duration (1 to 5 years), and support tier (1=basic, 2=standard, 3=dedicated)." --rounds 3 --protocol single_text
+```
+
+### Flow & Core Invariants
 
 ```
-POST /api/scenario/parse   →  Review parsed issues & parties  →  POST /api/negotiate
-      (parse only)                (confirm step required)             (with token)
+POST /api/scenario/parse   →  Confirm & Edit (UI / CLI)  →  Feasibility Check  →  POST /api/negotiate
+      (parse only)             (user inspects & modifies)       (u_joint_res >= 0)         (with token)
 ```
 
-1. **Describe** — Write a plain-language description of the negotiation.
-2. **Parse** — The LLM extracts issues (name, numeric range, meaning) and parties (weights, ideal values, reservation value).
-3. **Confirm** — Review the structured result, including which parties had LLM-inferred preferences. **You must confirm before the negotiation runs.** The system will never silently execute on a misparsed scenario.
-4. **Run** — The confirmed scenario is passed to `run_negotiation()` via the same call path as the fixed benchmark scenarios.
+1. **Describe** — Write a plain-language description of the negotiation in the Next.js **Scenario Builder** tab or CLI.
+2. **Parse & Ordinal-to-Cardinal Mapping** — The LLM extracts issues with numeric ranges and maps ordinal tiers (e.g., support tiers: 1=basic, 2=standard, 3=dedicated) to cardinal intervals.
+3. **Confirm & Edit Step** — The UI presents parsed issues, ranges, party ideal values, weights, and reservation thresholds with clear provenance tags (`user_specified` vs `llm_inferred`). **The user can edit any weight or issue range directly** before running.
+4. **Pre-Flight Feasibility Check** — Before invoking the negotiation graph, the engine tests whether a mutually acceptable deal is mathematically possible ($\sum_i r_i \le \text{surplus}$). If infeasible, an amber warning is raised immediately, avoiding wasted LLM calls.
+5. **Run & Plain-Language Summary** — The confirmed scenario executes under `single_text` or `alternating_offers`, outputting both raw numbers and an accessible plain-language narrative.
+
+### Empirical Validation: 4 Live Custom Checks (N=3 + 1 Infeasible)
+
+Documented in [`RESULTS.md`](RESULTS.md#stage-f-custom-scenario-checks-illustrative-n3-not-a-benchmark):
+1. **Software Licensing (3 issues, 2 parties)**: Feasible. Agreement reached in 1 round at Annual License Fee $260k, Duration 3 yrs, Support Tier 2 (distance to frontier: 0.1000).
+2. **Salary Negotiation (3 issues, 2 fully-specified parties)**: Feasible. Agreement reached in 1 round at Salary $165k, Equity 6,000 shares, 45 remote days (distance to frontier: 0.0259).
+3. **Urban Development (3 issues, 3 parties with 1 LLM-inferred)**: Feasible. Agreement reached in 1 round at Height 17.5 stories, Green space 27.5%, Affordable units 55 (distance to frontier: 0.0212).
+4. **Deliberately Infeasible Dispute (Reservation 0.95 each)**: Pre-flight feasibility check detected negative joint surplus (-0.245) and flagged an immediate warning. Invariant verification confirmed all weight vectors sum strictly to 1.0 and $U(\text{ideal}) = 1.0$.
 
 ### Issue Count Limits
 
@@ -893,6 +893,20 @@ Navigate to the **Scenario Builder** tab in the web UI. The amber banner is show
 > *"Free-form scenarios are not covered by this project's N=30 statistical benchmarks; results here are illustrative, not validated."*
 
 Party cards display a **green "User-specified"** badge or an **amber "LLM-inferred"** badge, making provenance visible at a glance before you confirm and run.
+
+---
+
+## ⚠️ Limitations & Honest Research Disclosures
+
+1. **Parity with Midpoint on Symmetric Issues**:
+   - In symmetric linear continuous domains without private reservation thresholds, simple midpoint coordinate averaging achieves comparable or slightly higher utilitarian welfare (0.908 vs 0.905) at zero token and latency cost.
+   - The Consensus Engine provides genuine value in asymmetric, strategic, or private-reservation regimes where midpoint averaging causes up to 100% contract breach, but does not provide an efficiency premium in symmetric linear benchmarks.
+2. **Simulated Agents vs. Human Bargaining**:
+   - LLM stakeholder personas simulate bounded concession dynamics and verbal posturing, but cannot fully replicate human psychological factors, reputation concerns, or long-term dynamic relationship considerations.
+3. **Sample Sizes & Rate Limits**:
+   - To respect Groq API free-tier rate and token-per-day quotas (e.g. 200,000 TPD on larger models), Stage a was evaluated across completed empirical runs ($N=18$ live engine trials, $N=90$ baselines), Stage d across $N=100$ baselines, and Stage f across 4 live checks. Stages b (`alternating_offers`) and c (`strategic_negotiation`) are marked *"not yet run (resume with `make benchmarks`)"* in [`RESULTS.md`](RESULTS.md).
+4. **Heuristic Bluff Detection**:
+   - The mediator's rolling bluff detection heuristic relies on satisfaction and concession trends. While effective against simple persistent stonewalling, it may generate false negatives against sophisticated, randomized bluffing strategies.
 
 ---
 
