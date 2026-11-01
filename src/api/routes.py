@@ -124,6 +124,7 @@ async def _execute_negotiation_job(
 
 
 @router.post("/negotiate")
+@router.post("/negotiate/start")
 async def start_negotiation(
     req: NegotiateRequest,
     background_tasks: BackgroundTasks,
@@ -214,6 +215,7 @@ async def start_negotiation(
 
 
 @router.get("/negotiate/{job_id}", response_model=JobStatusResponse)
+@router.get("/negotiate/job/{job_id}", response_model=JobStatusResponse)
 async def get_negotiation_job_status(job_id: str):
     """Poll progress of a background negotiation job."""
     if job_id not in _JOBS:
@@ -492,41 +494,59 @@ async def get_eval_report(scenario: str):
     from src.config import settings
     from src.eval.log_writer import load_trial_log
     from src.eval.runner import aggregate_results
-    log_dir = settings.data_dir / "logs"
-    if log_dir.exists():
-        matching = sorted(log_dir.glob(f"{scenario}*.jsonl"), reverse=True)
-        if matching:
-            results = load_trial_log(matching[0])
-            if results:
-                summary = aggregate_results(results)
-                report_md = generate_markdown_report(scenario, summary, results)
-                return {"scenario": scenario, "summary": summary, "report_markdown": report_md, "source_log": matching[0].name}
+
+    # Search tracked results/ first, then data/logs/
+    search_dirs = [settings.base_dir / "results", settings.data_dir / "logs"]
+    for log_dir in search_dirs:
+        if log_dir.exists():
+            matching = sorted(log_dir.glob(f"*{scenario}*.jsonl"), reverse=True)
+            if matching:
+                results = load_trial_log(matching[0])
+                if results:
+                    summary = aggregate_results(results)
+                    report_md = generate_markdown_report(scenario, summary, results)
+                    return {"scenario": scenario, "summary": summary, "report_markdown": report_md, "source_log": matching[0].name}
 
     return {"scenario": scenario, "summary": {}, "report_markdown": f"No benchmark run found for {scenario}"}
 
 
 @router.get("/logs")
 async def list_logs():
-    """List available JSONL trial logs in data/logs/."""
+    """List available JSONL trial logs in results/ and data/logs/."""
     from src.config import settings
-    log_dir = settings.data_dir / "logs"
+    search_dirs = [settings.base_dir / "results", settings.data_dir / "logs"]
+    seen = set()
     files = []
-    if log_dir.exists():
-        for p in sorted(log_dir.glob("*.jsonl"), reverse=True):
-            files.append({
-                "filename": p.name,
-                "size_bytes": p.stat().st_size,
-                "modified": p.stat().st_mtime,
-            })
+    for log_dir in search_dirs:
+        if log_dir.exists():
+            for p in sorted(log_dir.glob("*.jsonl"), reverse=True):
+                if p.name not in seen:
+                    seen.add(p.name)
+                    files.append({
+                        "filename": p.name,
+                        "size_bytes": p.stat().st_size,
+                        "modified": p.stat().st_mtime,
+                    })
     return {"logs": files}
 
 
 @router.get("/logs/{filename}")
 async def read_log(filename: str):
-    """Read records from a specific JSONL log file."""
+    """Read records from a specific JSONL log file (checks results/ then data/logs/)."""
     from src.config import settings
-    log_file = settings.data_dir / "logs" / filename
-    if not log_file.exists() or not filename.endswith(".jsonl"):
+    if not filename.endswith(".jsonl"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Invalid log file format")
+
+    search_dirs = [settings.base_dir / "results", settings.data_dir / "logs"]
+    log_file = None
+    for d in search_dirs:
+        candidate = d / filename
+        if candidate.exists():
+            log_file = candidate
+            break
+
+    if not log_file:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Log file not found")
     
