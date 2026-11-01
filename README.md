@@ -475,10 +475,6 @@ python -m src.api.main
 # Terminal 2: Next.js research web frontend
 cd web && npm run dev
 # → http://localhost:3000
-
-# Terminal 3 (Optional): Streamlit dashboard
-streamlit run frontend/app.py
-# → http://localhost:8501
 ```
 
 ---
@@ -490,7 +486,7 @@ streamlit run frontend/app.py
 > To protect compute resources, endpoints calling LLM inference enforce:
 > - **Per-IP Rate Limit**: 10 requests per minute per client IP across `POST /api/negotiate`, `POST /api/negotiate/start`, `POST /api/scenario/parse`, and `POST /api/eval/run` (returns `429 Too Many Requests`).
 > - **Negotiation Cap**: `max_rounds` capped at $\le 10$ (returns `400 Bad Request` if exceeded).
-> - **Evaluation Cap**: `n_trials` on public batch runs capped at $\le 5$ (returns `400 Bad Request` if exceeded).
+> - **Evaluation Cap**: `n_trials` on public batch runs capped at $\le 30$ (returns `400 Bad Request` if exceeded).
 
 ### `POST /api/negotiate` or `/api/negotiate/start`
 
@@ -668,19 +664,18 @@ def compute_baseline(method: str, profiles, issues) -> dict[str, float]:
 
 ## 🖥 Frontend Interfaces & Deployment Links
 
-Consensus Engine provides two dedicated frontend interfaces for exploring multi-agent negotiations and empirical benchmarks:
+Consensus Engine is deployed on **Vercel** with a Next.js research frontend and a FastAPI backend service:
 
 | Interface | Technology | Primary Purpose | Live URL / Local Access |
 |---|---|---|---|
 | **Research Web App** | Next.js 16.3.4, TypeScript, Tailwind, Recharts | Interactive runner, 95% bootstrap CI charts, privacy probe simplex visualizer, JSONL trial explorer | **[consensus-engine-opal.vercel.app](https://consensus-engine-opal.vercel.app/)** <br> *(Local: `http://localhost:3000`)* |
-| **Streamlit Analytics Dashboard** | Streamlit, Python, Requests | Rapid local experimentation, session playback, parameter sweeps | **[consensus-engine.streamlit.app](https://consensus-engine-y9ybfxmfwcmopgobfzzpjx.streamlit.app/)** <br> *(Local: `http://localhost:8501`)* |
-| **FastAPI Orchestration Backend** | FastAPI, LangGraph, ChromaDB, Groq | Agent graph execution, SQLite audit persistence, precedent memory | **[API Docs](http://localhost:8000/docs)** <br> *(Local: `http://localhost:8000`)* |
+| **FastAPI Orchestration Backend** | FastAPI, LangGraph, ChromaDB, Groq | Agent graph execution, SQLite audit persistence, precedent memory | **[consensus-engine-api.vercel.app/docs](https://consensus-engine-api.vercel.app/docs)** <br> *(Local: `http://localhost:8000/docs`)* |
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSaksham-19-cyber%2FConsensus-Engine&root-directory=web)
 
 ---
 
-### 1. Next.js Research Web App (`/web`)
+### Next.js Research Web App (`/web`)
 
 * **Live Negotiation Runner**: Configure scenarios (`business_deal`, `roommate`, `strategic_negotiation`), select protocols (`single_text`, `alternating_offers`), and inspect round-by-round proposals, agent critiques, and real-time mediator bluff detection flags.
 * **Benchmark Dashboard**: Interactive bar charts with **95% bootstrap confidence interval error bars**, Wilcoxon significance badges ($p < 0.05^*$, $p < 0.01^{**}$, n.s.), reservation breach curves ($N=100$), and strategic anchor manipulation span capture comparisons ($N=30$).
@@ -697,54 +692,54 @@ npm run dev
 
 ---
 
-### 2. Streamlit Dashboard (`/frontend`)
-
-> **Note on Frontend Differences:** The Streamlit dashboard is the project's legacy/rapid-experimentation interface, dedicated strictly to running and inspecting the 4 fixed benchmark scenarios (`roommate`, `business_deal`, `trip_planning`, `strategic_negotiation`). The **Free-Form Scenario Builder** is implemented **exclusively in the Next.js application (`/web`)**.
-
-```bash
-# Start backend orchestrator
-uvicorn src.api.main:app --port 8000 &
-
-# Start Streamlit frontend
-streamlit run frontend/app.py
-# Open http://localhost:8501
-```
-
----
-
 ### 🌐 Deployment Architecture (Vercel)
 
+The system deploys as **two Vercel projects from this single repository**:
+
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Vercel Deployment                               │
-│                                                                        │
-│  Next.js 16.3.4 App Router (Frontend)   FastAPI Serverless Function   │
-│  - Recharts Empirical Dashboards        - api/index.py (ASGI app)      │
-│  - Privacy Simplex Visualizer           - includeFiles: "results/**"   │
-│  - JSONL Trial Record Explorer          - GET /api/logs, /api/eval/... │
-└────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 Vercel Deployment                                      │
+│                                                                                        │
+│  Project 1: Frontend (Root: /web)              Project 2: Backend (Root: .)            │
+│  - Next.js 16.3.4 App Router                   - FastAPI Serverless App (app.py)       │
+│  - Recharts Empirical Dashboards               - vercel.json with functions.includeFiles│
+│  - Privacy Simplex Visualizer                  - results/** bundled statically         │
+│  - JSONL Trial Record Explorer                 - GET /api/logs, /api/eval/report/...   │
+│  - Env: NEXT_PUBLIC_API_URL                    - Env: GROQ_API_KEY, CORS_ORIGINS      │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Frontend & Backend Deployment on Vercel
-Both the Next.js frontend and the FastAPI backend are deployed on Vercel:
-1. Root `vercel.json` configures serverless routing:
-   * `/api/(.*)` rewrites to `api/index.py` (which mounts the FastAPI ASGI app from `src.api.main:app`).
-   * `functions: { "api/index.py": { "includeFiles": "results/**", "maxDuration": 300 } }` ensures tracked empirical result logs in `results/` are bundled into the serverless function.
-2. In Vercel Project Settings → **Environment Variables**, set:
-   ```env
-   GROQ_API_KEY=your_groq_api_key
-   ```
-   For client-side API routing during local development or detached mode, set `NEXT_PUBLIC_API_URL` to your backend origin (or leave empty to use relative `/api` rewrites).
+#### 1. Frontend Project (`/web`)
+* **Project Root Directory**: `web`
+* **Framework Preset**: Next.js
+* **Environment Variables**:
+  * `NEXT_PUBLIC_API_URL`: Backend origin URL, e.g. `https://consensus-engine-api.vercel.app` (HTTPS, no trailing slash). If left unset or during local dev, requests default to the relative `/api` path.
 
-#### Persistence & Serverless Function Limitations
-* **Serverless Filesystem:** Vercel serverless function execution is ephemeral; files outside `/tmp` are read-only. Tracked benchmark results are bundled statically via `functions.includeFiles`, while SQLite logs in ephemeral runtime are temporary unless configured with external database backends.
-* **Execution Duration Limits:** Under Vercel's Fluid Compute architecture, the default and standard maximum timeout for the Hobby (Free) tier is **300 seconds (5 minutes)**. On the Pro tier, standard maximum execution is **800 seconds (~13.3 minutes)**, with extended execution up to **1,800 seconds (30 minutes)** supported in beta for Python runtimes (see [Vercel Function Duration Configuration](https://vercel.com/docs/functions/configuring-functions/duration)).
+#### 2. Backend Project (Repository Root)
+* **Project Root Directory**: `.` (repo root)
+* **Entrypoint**: `app.py` (mounts `src.api.main:app` and routed via root `vercel.json`).
+* **Environment Variables**:
+  * `GROQ_API_KEY`: Required for LLM-driven negotiation trials and the privacy probe.
+  * `CORS_ORIGINS`: Comma-separated list of allowed origins (defaults to `https://consensus-engine-opal.vercel.app,http://localhost:3000`).
+* **Static Assets Bundling**:
+  `vercel.json` bundles `results/**` directly into the serverless function environment (`includeFiles: "results/**"`), enabling `GET /api/logs` and `GET /api/eval/report/{scenario}` to serve empirical benchmark data without external storage.
+* **Bundle Exclusion**:
+  Non-backend directories (`web/`, `tests/`, `assets/`, `node_modules/`, `*.md`) are excluded via `.vercelignore` and `excludeFiles` to ensure the serverless function stays well under the 500 MB uncompressed bundle limit.
+
+#### Ephemeral Storage on Vercel
+* On Vercel, serverless function execution is ephemeral and the container filesystem outside `/tmp` is read-only.
+* When `VERCEL=1` is detected in the environment, `src/config.py` automatically routes `data_dir`, `chroma_dir`, and `sqlite_path` to `/tmp/consensus_data`.
+* **Important**: Data stored in `/tmp` is ephemeral and lost between function cold starts and container recycles. Session history and precedent memory do not persist across invocations on Vercel.
+
+#### Execution Duration Limits
+* **Hobby (Free) Tier**: The default and maximum execution timeout is **300 seconds (5 minutes)**.
+* **Pro Tier**: The default is **300 seconds**, standard maximum execution is **800 seconds (~13.3 minutes)**, with extended execution up to **1,800 seconds (30 minutes)** supported in beta for Python runtimes (see [Vercel Functions Limits documentation](https://vercel.com/docs/functions/limitations)).
 
 ---
 
 ## 🧪 Free-Form Scenario Builder (Exploratory Mode)
 
-> **Frontend Availability:** The Free-Form Scenario Builder is implemented **exclusively in the Next.js web application (`/web`)** under the **Scenario Builder** tab. It is not available in the legacy Streamlit dashboard (`frontend/app.py`), which remains dedicated to the 4 fixed benchmark scenarios.
+> **Frontend Availability:** The Free-Form Scenario Builder is available in the Next.js web application (`/web`) under the **Scenario Builder** tab.
 >
 > **Scope notice:** Free-form scenarios are **not** covered by the N=30 statistical benchmarks documented in this README. The Pareto efficiency ratios, agreement rates, and Wilcoxon test results in the benchmark tables apply exclusively to the four fixed scenarios (`business_deal`, `roommate`, `trip_planning`, `strategic_negotiation`). Results from free-form scenarios are illustrative and exploratory — they should not be cited as evidence of the engine's negotiation performance.
 
