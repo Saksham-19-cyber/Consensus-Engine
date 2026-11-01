@@ -434,6 +434,9 @@ Evaluated on the 5-issue `business_deal` scenario across $N=30$ independent seed
 While raw efficiency metrics in symmetric spaces show parity, multi-agent negotiation exhibits critical empirical and structural advantages in non-trivial operating regimes:
 
 ##### 1. Empirical Impasse & Breach Rates Under Asymmetric Reservation Thresholds
+
+> **Definition of Breach:** A deal is classified as a *breach* (specifically an involuntary contract breach) when an agreement is declared or imposed in which at least one participant's true utility is strictly below its private reservation value ($u_i < r_i$). Under voluntary individual rationality, a rational negotiator must exit into safe impasse rather than ratify a sub-reservation agreement.
+
 Midpoint averaging blindly computes an arithmetic centroid without testing individual rationality ($U_i \ge r_i$). When evaluated across $N=100$ independent seeded trials with varying reservation thresholds $r_i$ against Consensus Engine ($N=30$ seeded runs per tier):
 
 | Reservation Threshold ($r_i$) | Public Midpoint Feasible Agreement Rate ($N=100$) | Public Midpoint Involuntary Breach Rate ($N=100$) | Consensus Engine Voluntary Agreement Rate ($N=30$) | Consensus Engine Involuntary Breach Rate ($N=30$) |

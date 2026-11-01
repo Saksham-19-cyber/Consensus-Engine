@@ -177,6 +177,26 @@ class TestMediatorBluffDetection:
         suspects = mediator.detect_bluffing()
         assert suspects == []
 
+    def test_bluff_detector_threshold_boundary_with_deliberate_rounding(self):
+        """
+        Unit test for bluff detector threshold boundary with deliberate rounding:
+        _BLUFF_CONCESSION_CEILING = 0.20 and _BLUFF_SAT_CEILING = 4.0.
+        Concession strictly below 0.20 triggers, >= 0.20 does not.
+        """
+        from src.agents.mediator import MediatorAgent
+        # Below threshold: 0.19 triggers
+        mediator_flagged = MediatorAgent(["Agent1"], [])
+        for _ in range(3):
+            mediator_flagged._critique_history["Agent1"].append((2.5, 0.19))
+        assert "Agent1" in mediator_flagged.detect_bluffing()
+
+        # At or above threshold: 0.20 does NOT trigger
+        mediator_not_flagged = MediatorAgent(["Agent2"], [])
+        for _ in range(3):
+            mediator_not_flagged._critique_history["Agent2"].append((2.5, 0.20))
+        assert "Agent2" not in mediator_not_flagged.detect_bluffing()
+
+
 
 class TestStrategicScenario:
     def test_scenario_generates_with_honesty_levels(self):
