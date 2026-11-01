@@ -91,7 +91,7 @@ class StrategicStakeholderAgent(StakeholderAgent):
         critique.round_number = round_number
         # Override acceptable with TRUE utility check — communicated feedback is
         # strategic but the outcome logic remains honest.
-        critique.acceptable = is_acceptable or critique.acceptable
+        critique.acceptable = is_acceptable
 
         # Clamp concession_willingness based on honesty_level and round pressure
         critique.concession_willingness = self._clamp_concession(

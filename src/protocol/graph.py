@@ -190,12 +190,21 @@ def build_negotiation_graph(
                 "max_rounds": NegotiationStatus.MAX_ROUNDS,
             }
 
+            all_satisfied = all(
+                agent.would_accept(proposal)
+                for agent in stakeholder_agents.values()
+            )
+            agreement_reached = (reason == "agreed") and all_satisfied
+            status = status_map.get(reason, NegotiationStatus.MAX_ROUNDS)
+            if reason == "agreed" and not all_satisfied:
+                status = NegotiationStatus.IMPASSE
+
             outcome = NegotiationOutcome(
                 final_proposal=proposal,
                 per_agent_utilities=per_agent_utilities,
-                status=status_map.get(reason, NegotiationStatus.MAX_ROUNDS),
+                status=status,
                 rounds_taken=state["round_number"],
-                agreement_reached=reason == "agreed",
+                agreement_reached=agreement_reached,
                 protocol_used="single_text",
                 bluff_detection_scores=mediator.get_bluff_detection_scores(),
             )

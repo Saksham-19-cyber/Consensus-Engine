@@ -65,7 +65,7 @@ class StakeholderAgent:
 
         critique.agent_name = self.name
         critique.round_number = round_number
-        critique.acceptable = is_acceptable or critique.acceptable
+        critique.acceptable = is_acceptable
 
         self.history.append({
             "round": round_number,

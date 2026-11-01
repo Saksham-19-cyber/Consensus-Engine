@@ -1,7 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Proposal(BaseModel):
@@ -62,7 +62,7 @@ class NegotiationMessage(BaseModel):
     agent_name: str
     content: str
     round_number: int = 0
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     message_type: str = "text"
     metadata: dict = Field(default_factory=dict)
 

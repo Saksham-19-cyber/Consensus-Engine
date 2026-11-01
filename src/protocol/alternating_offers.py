@@ -195,9 +195,12 @@ def run_alternating_offers(
                     round_number=round_num,
                 )
 
-            # True utility check overrides the LLM's action for accept
-            if profile.would_accept(current_proposal) and response.action != AgentAction.WALK_AWAY:
-                response.action = AgentAction.ACCEPT
+            # An agent may ACCEPT only if profile.would_accept(current_proposal).
+            # If the LLM returns ACCEPT below reservation, treat it as a counteroffer.
+            if response.action == AgentAction.ACCEPT and not profile.would_accept(current_proposal):
+                response.action = AgentAction.COUNTEROFFER
+                if not response.proposal:
+                    response.proposal = current_proposal.copy()
 
             emit(NegotiationMessage(
                 role="stakeholder",
