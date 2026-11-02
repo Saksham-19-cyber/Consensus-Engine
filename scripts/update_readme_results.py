@@ -14,7 +14,10 @@ import json
 import os
 import re
 import sys
+from collections import defaultdict
 from pathlib import Path
+from typing import Any
+import numpy as np
 
 # Add project root to sys.path
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -46,8 +49,8 @@ def format_p_val(wilcoxon_entry: dict | None) -> str:
     else:
         sig = "n.s."
 
-    if p < 1e-6:
-        p_str = "<1e-6"
+    if p < 1e-4:
+        p_str = "<1e-4"
     else:
         p_str = f"{p:.4f}"
     return f"p = {p_str} {sig}"
@@ -61,6 +64,14 @@ def generate_stage_a_table() -> str:
     results = load_trial_log(log_file)
     summary = aggregate_results(results, engine_method="consensus_engine")
 
+    # Group trials by seed for paired stats vs engine
+    by_method_by_seed: dict[str, dict[int, Any]] = defaultdict(dict)
+    for r in results:
+        key = r.seed if r.seed != 0 else r.trial_id
+        by_method_by_seed[r.method][key] = r
+
+    engine_by_seed = by_method_by_seed.get("consensus_engine", {})
+
     # Drop duplicate alias private_ideal_average when naive_average is present
     filtered_methods = [
         m for m in summary.keys()
@@ -73,12 +84,9 @@ def generate_stage_a_table() -> str:
     )
 
     lines = [
-        "| Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Wilcoxon vs Engine | vs Engine |",
+        "| Method | Agree% | Dist to Frontier (grid floor ~0.035) | Nash Welfare (Headline) [95% CI] | Utilitarian Welfare Ratio [95% CI] | Paired Nash Diff (Baseline - Engine) | W/T/L vs Engine | Wilcoxon p (Nash) | Wilcoxon p (Util Ratio) | vs Engine (Nash) |",
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
-
-    engine_summary = summary.get("consensus_engine", {})
-    engine_dist = engine_summary.get("mean_distance_to_frontier", 0.0)
 
     for m in ordered_methods:
         if m not in summary:
@@ -98,28 +106,51 @@ def generate_stage_a_table() -> str:
         util_ci = s.get("ci95_utilitarian_welfare_ratio", s.get("ci95_pareto_ratio", (util_mean, util_mean)))
         util_str = f"{util_mean:.4f} [{util_ci[0]:.4f}, {util_ci[1]:.4f}]"
 
-        min_u = f"{s.get('mean_min_utility', 0.0):.4f}"
-        gini = f"{s.get('mean_gini', 0.0):.4f}"
-        rounds = f"{s.get('mean_rounds', 0.0):.1f}"
+        wilcoxon_nash = s.get("wilcoxon_nash_vs_engine")
+        wilcoxon_util = s.get("wilcoxon_pareto_vs_engine")
 
-        wilcoxon = s.get("wilcoxon_pareto_vs_engine")
-        w_str = format_p_val(wilcoxon) if m != "consensus_engine" else "*(Engine)*"
+        w_nash_str = format_p_val(wilcoxon_nash) if m != "consensus_engine" else "*(Engine)*"
+        w_util_str = format_p_val(wilcoxon_util) if m != "consensus_engine" else "*(Engine)*"
 
-        # Determine vs engine column from distance difference sign and significance
+        # Compute paired differences and W/T/L vs engine
         if m == "consensus_engine":
+            paired_diff_str = "—"
+            wtl_str = "—"
             vs_engine = "—"
         else:
-            p_val = wilcoxon.get("p_value") if wilcoxon else None
+            method_seeds = by_method_by_seed.get(m, {})
+            common_keys = sorted(set(engine_by_seed.keys()) & set(method_seeds.keys()))
+            wins = 0
+            ties = 0
+            losses = 0
+            diffs = []
+            for k in common_keys:
+                e_val = engine_by_seed[k].fairness.nash_welfare
+                b_val = method_seeds[k].fairness.nash_welfare
+                diff = b_val - e_val
+                diffs.append(diff)
+                if round(diff, 4) > 0:
+                    wins += 1
+                elif round(diff, 4) < 0:
+                    losses += 1
+                else:
+                    ties += 1
+
+            mean_diff = float(np.mean(diffs)) if diffs else 0.0
+            paired_diff_str = f"{mean_diff:+.4f}"
+            wtl_str = f"{wins} / {ties} / {losses}"
+
+            p_val = wilcoxon_nash.get("p_value") if wilcoxon_nash else None
             is_sig = p_val is not None and p_val < 0.05
             if not is_sig:
                 vs_engine = "n.s."
-            elif dist_mean < engine_dist:
+            elif mean_diff > 0:
                 vs_engine = "better"
             else:
                 vs_engine = "worse"
 
         lines.append(
-            f"| `{m}` | {agree_pct} | {dist_str} | {nash_str} | {util_str} | {min_u} | {gini} | {rounds} | {w_str} | {vs_engine} |"
+            f"| `{m}` | {agree_pct} | {dist_str} | {nash_str} | {util_str} | {paired_diff_str} | {wtl_str} | {w_nash_str} | {w_util_str} | {vs_engine} |"
         )
 
     return "\n".join(lines)
@@ -134,17 +165,16 @@ def generate_reservation_sweep_table() -> str:
                 if line.strip():
                     try:
                         record = json.loads(line)
-                        sc_name = record.get("scenario_name", "")
-                        # e.g. business_deal_r_0.40
-                        m = re.search(r"r_([0-9.]+)", sc_name)
-                        if m:
-                            r_val = round(float(m.group(1)), 2)
-                            engine_trials_by_r.setdefault(r_val, []).append(record)
+                        if record.get("method") == "consensus_engine":
+                            sc_name = record.get("scenario_name", "")
+                            m = re.search(r"r_([0-9.]+)", sc_name)
+                            if m:
+                                r_val = round(float(m.group(1)), 2)
+                                engine_trials_by_r.setdefault(r_val, []).append(record)
                     except Exception:
                         pass
 
     # Baseline data: deterministic arithmetic across N=100
-    # mid_fail, naive_br
     baseline_stats = [
         (0.40, 0.0, 0.0),
         (0.55, 4.0, 0.0),
@@ -152,8 +182,6 @@ def generate_reservation_sweep_table() -> str:
         (0.65, 78.0, 24.0),
         (0.70, 100.0, 67.0),
     ]
-
-    breach_note = "0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`)"
 
     lines = [
         "| Reservation ($r$) | Midpoint Failure% ($N=100$) | IR-gated Midpoint Agree% ($N=100$) | Naive Breach% ($N=100$) | Engine Agreement Rate | Engine Involuntary Breach Rate |",
@@ -166,20 +194,22 @@ def generate_reservation_sweep_table() -> str:
             trials = engine_trials_by_r[r_val]
             n_tot = len(trials)
             n_agr = sum(1 for t in trials if t.get("agreement_reached"))
-            rate_str = f"{(n_agr / n_tot) * 100.0:.1f}% ({n_agr}/{n_tot} trials)"
+            rate_str = f"{(n_agr / n_tot) * 100.0:.1f}% ({n_agr}/{n_tot})"
         else:
-            rate_str = "*not yet run (resume with `python scripts/sweep_anchor_and_reservation.py`)*"
+            rate_str = "not run*"
 
         lines.append(
-            f"| $r = {r_val:.2f}$ | {mid_fail:.1f}% | {ir_gated_agree} | {naive_br:.1f}% | {rate_str} | {breach_note} |"
+            f"| $r = {r_val:.2f}$ | {mid_fail:.1f}% | {ir_gated_agree} | {naive_br:.1f}% | {rate_str} | 0.0%† |"
         )
+
+    lines.append("")
+    lines.append("† 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`).")
+    lines.append("* not run (resume with `python scripts/sweep_anchor_and_reservation.py`).")
 
     return "\n".join(lines)
 
 
 def generate_anchor_sweep_table() -> str:
-    # Deterministic baseline arithmetic over price range [10, 100] (delta = $90 * infl)
-    # Stated shift = delta; Naive shift = delta / 3 (1/3 capture)
     anchor_stats = [
         ("10%", 9.00, 3.00, 0.00, 3.3, 0.00),
         ("25%", 22.50, 7.50, 0.00, 8.3, 0.00),
@@ -284,9 +314,12 @@ def process_file(filepath: Path, check_only: bool = False) -> bool:
 def check_engine_records(claimed_config: str | None = None) -> bool:
     """Verify that all engine records match the model_config claimed in README and have llm_calls."""
     readme_file = BASE_DIR / "README.md"
-    if not claimed_config and readme_file.exists():
+    readme_text = ""
+    if readme_file.exists():
         with open(readme_file, "r", encoding="utf-8") as f:
             readme_text = f.read()
+
+    if not claimed_config and readme_text:
         m = re.search(r"produced using the `?([a-zA-Z0-9_]+)`? model configuration", readme_text)
         if m:
             claimed_config = m.group(1)
@@ -345,6 +378,12 @@ def check_engine_records(claimed_config: str | None = None) -> bool:
 
         if missing_calls:
             print(f"[CHECK FAILED] {len(missing_calls)} engine record(s) in {log_file.name} are missing 'llm_calls'")
+            all_valid = False
+
+        # Hard check: Fail if README says 'exactly 4' while any engine record differs from 4
+        calls_vary = any(r.get("llm_calls") != 4 for r in engine_records)
+        if calls_vary and "exactly 4" in readme_text:
+            print(f"[CHECK FAILED] README contains 'exactly 4' LLM calls but trial records differ (retries detected).")
             all_valid = False
 
     return all_valid

@@ -8,7 +8,7 @@
 [![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-1C8B6E?style=for-the-badge&logo=chainlink&logoColor=white)](https://github.com/langchain-ai/langgraph)
 [![Groq](https://img.shields.io/badge/LLM-Groq%20SDK-F55036?style=for-the-badge&logo=openai&logoColor=white)](https://groq.com)
 [![ChromaDB](https://img.shields.io/badge/Memory-ChromaDB-E85D04?style=for-the-badge&logo=databricks&logoColor=white)](https://trychroma.com)
-[![Tests](https://img.shields.io/badge/Tests-134%20passed-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-135%20passed-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-A371F7?style=for-the-badge)](LICENSE)
 
 <br/>
@@ -317,17 +317,17 @@ python -m src.eval.runner --scenario business_deal --n_trials 30 --protocol sing
 ```
 
 <!-- RESULTS:START stage_a_table -->
-| Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Wilcoxon vs Engine | vs Engine |
+| Method | Agree% | Dist to Frontier (grid floor ~0.035) | Nash Welfare (Headline) [95% CI] | Utilitarian Welfare Ratio [95% CI] | Paired Nash Diff (Baseline - Engine) | W/T/L vs Engine | Wilcoxon p (Nash) | Wilcoxon p (Util Ratio) | vs Engine (Nash) |
 |---|---|---|---|---|---|---|---|---|---|
-| `consensus_engine` | 100.0% | 0.0686 [0.0568, 0.0817] | 0.3939 [0.3770, 0.4107] | 0.9113 [0.8966, 0.9250] | 0.6244 | 0.0732 | 1.0 | *(Engine)* | — |
-| `naive_average` | 100.0% | 0.0362 [0.0288, 0.0441] | 0.4532 [0.4342, 0.4723] | 0.9525 [0.9425, 0.9612] | 0.6843 | 0.0651 | 0.0 | p = <1e-6 ** | better |
-| `nash_bargaining` | 100.0% | 0.0350 [0.0310, 0.0391] | 0.5481 [0.5202, 0.5757] | 0.9991 [0.9977, 0.9999] | 0.7368 | 0.0504 | 0.0 | p = <1e-6 ** | better |
-| `public_midpoint` | 100.0% | 0.0725 [0.0612, 0.0849] | 0.3885 [0.3744, 0.4019] | 0.9082 [0.8952, 0.9203] | 0.6193 | 0.0748 | 0.0 | p = 0.0057 ** | worse |
-| `random_uniform` | 96.7% | 0.1610 [0.1281, 0.1973] | 0.2887 [0.2594, 0.3207] | 0.8205 [0.7912, 0.8480] | 0.5390 | 0.0826 | 0.0 | p = <1e-6 ** | worse |
+| `consensus_engine` | 100.0% | 0.0686 [0.0568, 0.0817] | 0.3939 [0.3770, 0.4107] | 0.9113 [0.8966, 0.9250] | — | — | *(Engine)* | *(Engine)* | — |
+| `naive_average` | 100.0% | 0.0362 [0.0288, 0.0441] | 0.4532 [0.4342, 0.4723] | 0.9525 [0.9425, 0.9612] | +0.0593 | 29 / 0 / 1 | p = <1e-4 ** | p = <1e-4 ** | better |
+| `nash_bargaining` | 100.0% | 0.0350 [0.0310, 0.0391] | 0.5481 [0.5202, 0.5757] | 0.9991 [0.9977, 0.9999] | +0.1542 | 30 / 0 / 0 | p = <1e-4 ** | p = <1e-4 ** | better |
+| `public_midpoint` | 100.0% | 0.0725 [0.0612, 0.0849] | 0.3885 [0.3744, 0.4019] | 0.9082 [0.8952, 0.9203] | -0.0054 | 2 / 9 / 19 | p = 0.0049 ** | p = 0.0057 ** | worse |
+| `random_uniform` | 96.7% | 0.1610 [0.1281, 0.1973] | 0.2887 [0.2594, 0.3207] | 0.8205 [0.7912, 0.8480] | -0.1052 | 2 / 0 / 28 | p = <1e-4 ** | p = <1e-4 ** | worse |
 <!-- RESULTS:END stage_a_table -->
 
 > ⚠️ **What This Benchmark Measures (Honest Caveat):**  
-> All 30 Consensus Engine trials ended in round 1 with exactly 4 LLM calls each (1 mediator proposal + 3 stakeholder critiques). Every party accepted the mediator's first proposal immediately. The engine's edge over the public midpoint reflects the mediator adjusting the midpoint using issue descriptions, **NOT iterative negotiation**. This should not be described or interpreted as negotiation superiority.
+> All 30 Consensus Engine trials ended in round 1 with 4 LLM calls per trial (121 total, 1 retry) (1 mediator proposal + 3 stakeholder critiques). Every party accepted the mediator's first proposal immediately. The engine vs midpoint is a small effect: Nash welfare +0.0054 (0.3939 vs 0.3885, about 1.4%, p = 0.0049 **); distance to frontier 0.0686 vs 0.0725 (grid floor ~0.035). The engine ties the midpoint exactly in 9 of 30 seeds, wins 19, and loses 2 (deviations are mostly order_volume and delivery_days). This reflects the mediator adjusting the midpoint using issue descriptions, **NOT iterative negotiation**, across one scenario and one configuration (20b_vs_20b). This should not be described or interpreted as negotiation superiority.
 >
 > When comparing methods, **Nash social welfare and Utilitarian welfare ratio serve as headline metrics**. Because the discrete frontier grid sets an empirical distance floor near ~0.035 (under which even theoretical frontiers like `nash_bargaining` score 0.0350 despite continuous distance $\approx 0$), distance differences below the grid resolution (~0.035) are discretization artifacts and not meaningful. In symmetric continuous domains without tight private reservations, arithmetic baselines like `naive_average` achieve high utilitarian welfare because the arithmetic mean is an effective centroid when preferences are symmetric.
 
@@ -345,11 +345,14 @@ python scripts/sweep_anchor_and_reservation.py --n_engine 30 --n_baselines 100 -
 <!-- RESULTS:START reservation_sweep_table -->
 | Reservation ($r$) | Midpoint Failure% ($N=100$) | IR-gated Midpoint Agree% ($N=100$) | Naive Breach% ($N=100$) | Engine Agreement Rate | Engine Involuntary Breach Rate |
 |---|---|---|---|---|---|
-| $r = 0.40$ | 0.0% | 100.0% | 0.0% | 100.0% (2/2 trials) | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
-| $r = 0.55$ | 4.0% | 96.0% | 0.0% | *not yet run (resume with `python scripts/sweep_anchor_and_reservation.py`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
-| $r = 0.60$ | 33.0% | 67.0% | 1.0% | *not yet run (resume with `python scripts/sweep_anchor_and_reservation.py`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
-| $r = 0.65$ | 78.0% | 22.0% | 24.0% | *not yet run (resume with `python scripts/sweep_anchor_and_reservation.py`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
-| $r = 0.70$ | 100.0% | 0.0% | 67.0% | *not yet run (resume with `python scripts/sweep_anchor_and_reservation.py`)* | 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`) |
+| $r = 0.40$ | 0.0% | 100.0% | 0.0% | not run* | 0.0%† |
+| $r = 0.55$ | 4.0% | 96.0% | 0.0% | not run* | 0.0%† |
+| $r = 0.60$ | 33.0% | 67.0% | 1.0% | not run* | 0.0%† |
+| $r = 0.65$ | 78.0% | 22.0% | 24.0% | not run* | 0.0%† |
+| $r = 0.70$ | 100.0% | 0.0% | 67.0% | not run* | 0.0%† |
+
+† 0.0% by construction (enforced by `would_accept`, covered by `tests/test_individual_rationality.py`).
+* not run (resume with `python scripts/sweep_anchor_and_reservation.py`).
 <!-- RESULTS:END reservation_sweep_table -->
 
 *Key Takeaway*: Involuntary breach rate for Consensus Engine (and any IR-gated method, including IR-gated midpoint) is **0.0% by construction**: Individual Rationality is strictly enforced in code (`would_accept()` checks $u_i \ge r_i$, tested in `tests/test_individual_rationality.py`). Because any gated method rejects sub-reservation proposals by design, agreement rate under tightening reservation values ($r \ge 0.55$) is the primary empirical metric.
@@ -406,7 +409,7 @@ cp .env.example .env
 
 ```bash
 pytest -v
-# Expected: 134 passed (+ 1 live integration test requiring GROQ_API_KEY)
+# Expected: 135 passed (+ 1 live integration test requiring GROQ_API_KEY)
 ```
 
 ### Run a Negotiation *(requires GROQ_API_KEY)*
@@ -673,10 +676,11 @@ Consensus Engine is deployed on **Vercel** with a Next.js research frontend and 
 
 | Interface | Technology | Primary Purpose | Live URL / Local Access |
 |---|---|---|---|
-| **Research Web App** | Next.js 16.3.4, TypeScript, Tailwind, Recharts | Interactive runner, 95% bootstrap CI charts, privacy probe simplex visualizer, JSONL trial explorer | **[consensus-engine-opal.vercel.app](https://consensus-engine-opal.vercel.app/)** <br> *(Local: `http://localhost:3000`)* |
-| **FastAPI Orchestration Backend** | FastAPI, LangGraph, ChromaDB, Groq | Agent graph execution, SQLite audit persistence, precedent memory | **[consensus-engine-api.vercel.app/docs](https://consensus-engine-api.vercel.app/docs)** <br> *(Local: `http://localhost:8000/docs`)* |
+| **Research Web App** | Next.js 16.3.4, TypeScript, Tailwind, Recharts | Interactive runner, 95% bootstrap CI charts, privacy probe simplex visualizer, JSONL trial explorer | **[consensus-engine-wbbr-iota.vercel.app](https://consensus-engine-wbbr-iota.vercel.app/)** <br> *(Local: `http://localhost:3000`)* |
+| **FastAPI Orchestration Backend** | FastAPI, LangGraph, ChromaDB, Groq | Agent graph execution, SQLite audit persistence, precedent memory | **[consensus-engine-mnnq.vercel.app/docs](https://consensus-engine-mnnq.vercel.app/docs)** <br> *(Local: `http://localhost:8000/docs`)* |
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSaksham-19-cyber%2FConsensus-Engine&root-directory=web)
+[![Deploy Frontend with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSaksham-19-cyber%2FConsensus-Engine&root-directory=web)
+[![Deploy Backend with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSaksham-19-cyber%2FConsensus-Engine&env=GROQ_API_KEY)
 
 ---
 
@@ -718,14 +722,16 @@ The system deploys as **two Vercel projects from this single repository**:
 * **Project Root Directory**: `web`
 * **Framework Preset**: Next.js
 * **Environment Variables**:
-  * `NEXT_PUBLIC_API_URL`: Backend origin URL, e.g. `https://consensus-engine-api.vercel.app` (HTTPS, no trailing slash). If left unset or during local dev, requests default to the relative `/api` path.
+  * `NEXT_PUBLIC_API_URL`: Backend origin URL, e.g. `https://consensus-engine-mnnq.vercel.app` (HTTPS, no trailing slash). In local development (`localhost`), requests default to `http://localhost:8000` when unset; in deployed production builds without this variable set, the frontend alerts "Backend URL not configured" (there is no relative `/api` Next.js rewrite).
 
 #### 2. Backend Project (Repository Root)
 * **Project Root Directory**: `.` (repo root)
 * **Entrypoint**: `app.py` (mounts `src.api.main:app` and routed via root `vercel.json`).
 * **Environment Variables**:
   * `GROQ_API_KEY`: Required for LLM-driven negotiation trials and the privacy probe.
-  * `CORS_ORIGINS`: Comma-separated list of allowed origins (defaults to `https://consensus-engine-opal.vercel.app,http://localhost:3000`).
+  * `CORS_ORIGINS`: Comma-separated list of allowed origins (defaults to `https://consensus-engine-wbbr-iota.vercel.app,http://localhost:3000`).
+* **CORS Regex Matching & Security Note**:
+  In addition to explicit origins, `src/api/main.py` configures `allow_origin_regex = r"^https:\/\/.*\.vercel\.app$"` with `allow_credentials=True` to seamlessly support preview branch deployments. Note that **CORS is a browser-enforced origin mechanism, not an access control or authentication layer**; non-browser clients and automated scripts bypass CORS restrictions.
 * **Static Assets Bundling**:
   `vercel.json` bundles `results/**` directly into the serverless function environment (`includeFiles: "results/**"`), enabling `GET /api/logs` and `GET /api/eval/report/{scenario}` to serve empirical benchmark data without external storage.
 * **Bundle Exclusion**:
@@ -856,10 +862,10 @@ Party cards display a **green "User-specified"** badge or an **amber "LLM-inferr
 ## ⚠️ Limitations & Honest Research Disclosures
 
 1. **Mediator Midpoint Adjustment vs. Iterative Negotiation**:
-   - In the Stage a benchmark (`business_deal`, $N=30$), all 30 Consensus Engine trials concluded in round 1 with exactly 4 LLM calls each (1 mediator proposal + 3 stakeholder critiques). Every party accepted the mediator's initial proposal.
-   - The engine's slight advantage over the public midpoint (distance to frontier 0.0654 vs 0.0725, $p=0.0017^{**}$; Nash welfare 0.3990 vs 0.3885, $p=0.0015^{**}$) therefore reflects the mediator adjusting the midpoint using issue descriptions, **NOT iterative back-and-forth negotiation**. In symmetric continuous domains without tight private reservations, arithmetic baselines like `naive_average` achieve high utilitarian welfare (0.9525) with zero LLM calls.
+   - In the Stage a benchmark (`business_deal`, $N=30$), all 30 Consensus Engine trials concluded in round 1 with 4 LLM calls per trial (121 total, 1 retry) (1 mediator proposal + 3 stakeholder critiques). Every party accepted the mediator's initial proposal.
+   - The engine vs midpoint difference is a small effect: Nash welfare +0.0054 (0.3939 vs 0.3885, about 1.4%, $p=0.0049^{**}$); distance to frontier 0.0686 vs 0.0725 (grid floor ~0.035). The engine ties the midpoint exactly in 9 of 30 seeds, wins 19, and loses 2 (deviations are mostly order_volume and delivery_days). This reflects the mediator adjusting the midpoint using issue descriptions, **NOT iterative back-and-forth negotiation**, evaluated on one scenario (`business_deal`) under one configuration (`20b_vs_20b`). In symmetric continuous domains without tight private reservations, arithmetic baselines like `naive_average` achieve high utilitarian welfare (0.9525) with zero LLM calls.
 2. **Unrun Stages in Benchmark Suite**:
-   - Stage a was evaluated across $N=30$ live trials (120 real LLM calls) with 4 baselines ($N=120$ baseline trials, $N=150$ total trials across all methods). Stage d reservation sweep has $N=2$ trials for $r=0.40$ and is unrun for other tiers. Stage b (`alternating_offers`), Stage c (`strategic_negotiation`), and Stage e (privacy probe) are not yet run in batch benchmarks.
+   - Stage a was evaluated across $N=30$ live trials (121 real LLM calls) with 4 baselines ($N=120$ baseline trials, $N=150$ total trials across all methods). Stage d reservation sweep has $N=0$ active trials (legacy mixed 120b_vs_20b records archived to `results/archive/reservation_sweep_120b_vs_20b.jsonl`; unrun for 20b_vs_20b). Stage b (`alternating_offers`), Stage c (`strategic_negotiation`), and Stage e (privacy probe) are not yet run in batch benchmarks.
 3. **Bluff Detector Lacks Empirical Trial Evidence**:
    - The mediator's rolling bluff detector requires $W \ge 3$ consecutive rounds of critique history ($\bar{s}_i < 4.0 \;\wedge\; \bar{c}_i < 0.2$). Because all Stage a benchmark trials concluded in round 1, the bluff detector never triggered in real benchmark runs. While unit-tested in `tests/test_strategic.py`, it currently has no empirical activation data from extended multi-round sessions.
 4. **Simulated Agents vs. Human Bargaining**:
