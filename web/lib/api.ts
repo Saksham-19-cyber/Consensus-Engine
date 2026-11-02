@@ -158,7 +158,6 @@ export interface NegotiationJobStatus {
 // ──────────────────────────────────────────────────────────────────────────────
 
 export async function checkBackendHealth(): Promise<boolean> {
-  if (!API_BASE) return false;
   try {
     await fetch(`${API_BASE}/docs`, { method: 'HEAD', mode: 'no-cors' });
     return true;
@@ -168,9 +167,6 @@ export async function checkBackendHealth(): Promise<boolean> {
 }
 
 export async function startNegotiation(req: NegotiateRequest): Promise<{ job_id: string; status: string }> {
-  if (!API_BASE) {
-    throw new Error('NEXT_PUBLIC_API_URL is not configured. Please configure your backend API URL.');
-  }
   const res = await fetch(`${API_BASE}/api/negotiate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -184,9 +180,6 @@ export async function startNegotiation(req: NegotiateRequest): Promise<{ job_id:
 }
 
 export async function getNegotiationJob(jobId: string): Promise<NegotiationJobStatus> {
-  if (!API_BASE) {
-    throw new Error('NEXT_PUBLIC_API_URL is not configured.');
-  }
   const res = await fetch(`${API_BASE}/api/negotiate/${jobId}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -221,9 +214,6 @@ export async function runNegotiation(req: NegotiateRequest): Promise<SessionResp
 }
 
 export async function parseScenario(req: ParseScenarioRequest): Promise<ParseScenarioResponse> {
-  if (!API_BASE) {
-    throw new Error('NEXT_PUBLIC_API_URL is not configured. Please configure your backend API URL.');
-  }
   const res = await fetch(`${API_BASE}/api/scenario/parse`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -237,9 +227,6 @@ export async function parseScenario(req: ParseScenarioRequest): Promise<ParseSce
 }
 
 export async function updateScenario(req: UpdateScenarioRequest): Promise<ParseScenarioResponse> {
-  if (!API_BASE) {
-    throw new Error('NEXT_PUBLIC_API_URL is not configured.');
-  }
   const res = await fetch(`${API_BASE}/api/scenario/update`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -253,9 +240,6 @@ export async function updateScenario(req: UpdateScenarioRequest): Promise<ParseS
 }
 
 export async function getEvalReport(scenario: string): Promise<EvalReportResponse> {
-  if (!API_BASE) {
-    throw new Error('NEXT_PUBLIC_API_URL is not configured.');
-  }
   const res = await fetch(`${API_BASE}/api/eval/report/${scenario}`);
   if (!res.ok) {
     throw new Error(`Failed to fetch report: ${res.statusText}`);
@@ -264,7 +248,6 @@ export async function getEvalReport(scenario: string): Promise<EvalReportRespons
 }
 
 export async function listLogs(): Promise<LogFile[]> {
-  if (!API_BASE) return [];
   const res = await fetch(`${API_BASE}/api/logs`);
   if (!res.ok) {
     return [];
@@ -274,7 +257,6 @@ export async function listLogs(): Promise<LogFile[]> {
 }
 
 export async function readLogRecords(filename: string): Promise<TrialRecord[]> {
-  if (!API_BASE) return [];
   const res = await fetch(`${API_BASE}/api/logs/${filename}`);
   if (!res.ok) {
     return [];

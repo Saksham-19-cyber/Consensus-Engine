@@ -64,7 +64,7 @@ const ExploratorBanner: React.FC<{ compact?: boolean }> = ({ compact }) => (
       {!compact && (
         <p className="text-xs text-amber-400/80 mt-1 leading-relaxed">
           Free-form scenarios are <strong>not</strong> covered by this project&apos;s N=30
-          statistical benchmarks. The Pareto efficiency ratios, agreement rates, and Wilcoxon test
+          statistical benchmarks. The utilitarian welfare ratios, agreement rates, and Wilcoxon test
           results in the Benchmark Dashboard apply only to the four fixed scenarios
           (business_deal, roommate, trip_planning, strategic_negotiation). Results here are
           illustrative and should not be cited as evidence of the engine&apos;s negotiation
