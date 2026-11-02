@@ -42,7 +42,7 @@ if cors_env:
     allowed_origins = [orig.strip() for orig in cors_env.split(",") if orig.strip()]
 else:
     allowed_origins = [
-        "https://consensus-engine-opal.vercel.app",
+        "https://consensus-engine-wbbr-iota.vercel.app",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]

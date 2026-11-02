@@ -1,4 +1,18 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+const isLocalhost =
+  typeof window !== 'undefined'
+    ? window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    : process.env.NODE_ENV !== 'production';
+
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (isLocalhost ? 'http://localhost:8000' : '');
+
+function getApiUrl(path: string): string {
+  if (!API_BASE) {
+    throw new Error('Backend URL not configured. Please set NEXT_PUBLIC_API_URL in your deployment environment.');
+  }
+  return `${API_BASE}${path}`;
+}
 
 export interface NegotiateRequest {
   scenario: string;
@@ -158,6 +172,7 @@ export interface NegotiationJobStatus {
 // ──────────────────────────────────────────────────────────────────────────────
 
 export async function checkBackendHealth(): Promise<boolean> {
+  if (!API_BASE) return false;
   try {
     await fetch(`${API_BASE}/docs`, { method: 'HEAD', mode: 'no-cors' });
     return true;

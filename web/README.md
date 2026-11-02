@@ -57,5 +57,5 @@ Open [http://localhost:3000](http://localhost:3000) to view the UI.
 2. In the [Vercel Dashboard](https://vercel.com/new), import the repository.
 3. Set **Root Directory** to `web`.
 4. In **Environment Variables**, add:
-   - `NEXT_PUBLIC_API_URL`: Your deployed FastAPI backend URL.
+   - `NEXT_PUBLIC_API_URL`: Your deployed FastAPI backend URL (e.g. `https://consensus-engine-mnnq.vercel.app`).
 5. Click **Deploy**.

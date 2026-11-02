@@ -241,8 +241,9 @@ def run_engine_trial(
 ) -> TrialResult:
     effective_config = model_config or model_config_name
     _apply_model_config(effective_config)
-    from src.llm.client import get_total_calls
+    from src.llm.client import get_total_calls, get_token_usage
     calls_before = get_total_calls()
+    tokens_before = get_token_usage()
 
     from src.protocol.graph import run_negotiation
     # IMPORTANT: Do NOT pass scenario_name during benchmarks, so ChromaDB precedents don't contaminate independent trials
@@ -268,6 +269,12 @@ def run_engine_trial(
             logger.warning("privacy probe failed: %s", e)
 
     trial_calls = get_total_calls() - calls_before
+    tokens_after = get_token_usage()
+    trial_tokens = {
+        "prompt_tokens": tokens_after["prompt_tokens"] - tokens_before["prompt_tokens"],
+        "completion_tokens": tokens_after["completion_tokens"] - tokens_before["completion_tokens"],
+        "total_tokens": tokens_after["total_tokens"] - tokens_before["total_tokens"],
+    }
     commit_hash = git_commit_hash or get_git_commit_hash()
     timestamp = datetime.now(timezone.utc).isoformat()
     models = MODEL_CONFIGS.get(
@@ -290,6 +297,7 @@ def run_engine_trial(
         privacy=privacy_metrics,
         honesty_levels={p.name: p.honesty_level for p in profiles},
         llm_calls=trial_calls,
+        tokens_used=trial_tokens,
         model_config_name=effective_config,
         model_names=models,
         git_commit_hash=commit_hash,

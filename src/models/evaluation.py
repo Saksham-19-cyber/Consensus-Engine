@@ -80,6 +80,7 @@ class TrialResult(BaseModel):
     git_commit_hash: str = ""
     timestamp: str = ""
     llm_calls: int = 0
+    tokens_used: dict[str, int] = Field(default_factory=dict)
     # Bluff detection scores (empty for non-mediated protocols)
     bluff_detection_scores: dict[str, dict[str, float]] = Field(default_factory=dict)
 

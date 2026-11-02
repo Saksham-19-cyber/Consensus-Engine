@@ -20,6 +20,7 @@ T = TypeVar("T", bound=BaseModel)
 
 _client: Groq | None = None
 TOTAL_CALLS: int = 0
+TOTAL_TOKENS: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
 def get_total_calls() -> int:
@@ -30,6 +31,17 @@ def reset_total_calls() -> int:
     global TOTAL_CALLS
     old = TOTAL_CALLS
     TOTAL_CALLS = 0
+    return old
+
+
+def get_token_usage() -> dict[str, int]:
+    return dict(TOTAL_TOKENS)
+
+
+def reset_token_usage() -> dict[str, int]:
+    global TOTAL_TOKENS
+    old = dict(TOTAL_TOKENS)
+    TOTAL_TOKENS = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     return old
 
 
@@ -110,17 +122,28 @@ def _call_groq(
 
     time.sleep(0.5)
     start = time.time()
-    global TOTAL_CALLS
+    global TOTAL_CALLS, TOTAL_TOKENS
     TOTAL_CALLS += 1
     completion = client.chat.completions.create(**kwargs)
     elapsed = time.time() - start
+
+    prompt_tok = 0
+    completion_tok = 0
+    total_tok = 0
+    if hasattr(completion, "usage") and completion.usage:
+        prompt_tok = getattr(completion.usage, "prompt_tokens", 0) or 0
+        completion_tok = getattr(completion.usage, "completion_tokens", 0) or 0
+        total_tok = getattr(completion.usage, "total_tokens", 0) or (prompt_tok + completion_tok)
+        TOTAL_TOKENS["prompt_tokens"] += prompt_tok
+        TOTAL_TOKENS["completion_tokens"] += completion_tok
+        TOTAL_TOKENS["total_tokens"] += total_tok
 
     content = completion.choices[0].message.content or ""
     logger.debug(
         "groq call model=%s tokens_in=%s tokens_out=%s elapsed=%.2fs",
         model,
-        getattr(completion.usage, "prompt_tokens", "?"),
-        getattr(completion.usage, "completion_tokens", "?"),
+        prompt_tok,
+        completion_tok,
         elapsed,
     )
     return content
