@@ -8,7 +8,7 @@
 [![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-1C8B6E?style=for-the-badge&logo=chainlink&logoColor=white)](https://github.com/langchain-ai/langgraph)
 [![Groq](https://img.shields.io/badge/LLM-Groq%20SDK-F55036?style=for-the-badge&logo=openai&logoColor=white)](https://groq.com)
 [![ChromaDB](https://img.shields.io/badge/Memory-ChromaDB-E85D04?style=for-the-badge&logo=databricks&logoColor=white)](https://trychroma.com)
-[![Tests](https://img.shields.io/badge/Tests-132%20passing-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-134%20passed-2EA043?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-A371F7?style=for-the-badge)](LICENSE)
 
 <br/>
@@ -129,7 +129,7 @@ src/
 │   ├── privacy.py                 # Reconstruction probe → leakage metrics
 │   ├── log_writer.py              # Streaming JSONL trial logs
 │   ├── report.py                  # mean±CI Markdown + JSON reports
-│   ├── pareto.py                  # Pareto frontier + efficiency ratio
+│   ├── pareto.py                  # Pareto frontier + utilitarian welfare ratio
 │   ├── fairness.py                # Nash welfare, Gini coefficient
 │   └── baselines.py               # Naive average, Nash bargaining solution
 │
@@ -172,17 +172,22 @@ $$\text{NSW}(\mathbf{x}^{\ast}) = \prod_{i=1}^{N} \max\left(U_i(\mathbf{x}^{\ast
 
 where $\varepsilon = 10^{-10}$.
 
-### Utilitarian Welfare Ratio & Distance to Frontier
+### Headline Welfare Metrics: Nash Welfare & Utilitarian Welfare Ratio
+
+Consensus Engine benchmarks headline **Nash Social Welfare** ($\text{NSW}$) and **Utilitarian Welfare Ratio** ($\text{UWR}$) as primary quality metrics.
 
 The **Utilitarian Welfare Ratio** measures the achieved sum of utilities relative to the maximum possible sum on the Pareto frontier:
 
 $$\text{UWR}(\mathbf{x}^{\ast}) = \frac{\sum_{i=1}^{N} U_i(\mathbf{x}^{\ast})}{\displaystyle\max_{\mathbf{u} \in \mathcal{F}} \sum_{i=1}^{N} u_i}$$
 
-The **Distance to Frontier** measures the Euclidean distance from the achieved utility vector $\mathbf{u}(\mathbf{x}^{\ast})$ to the nearest point on the Pareto frontier $\mathcal{F}$ in $[0, 1]^N$ utility space:
+The **Distance to Frontier** measures the Euclidean distance from the achieved utility vector $\mathbf{u}(\mathbf{x}^{\ast})$ to the nearest point on the discrete Pareto frontier $\mathcal{F}$ in $[0, 1]^N$ utility space:
 
 $$\text{DistToFrontier}(\mathbf{x}^{\ast}) = \min_{\mathbf{y} \in \mathcal{F}} \|\mathbf{u}(\mathbf{x}^{\ast}) - \mathbf{y}\|_2$$
 
 where $\mathcal{F}$ is the Pareto frontier computed by exhaustive grid search ($\le 4$ issues) or Monte Carlo sampling (5–6 issues).
+
+> ⚠️ **Metric Floor & Grid Resolution Caveat:**  
+> Discrete grid evaluation in multi-issue spaces introduces an empirical discretization floor near ~0.035 for 5-issue domains. For example, `nash_bargaining` analytically maximises the Nash product and lies on the continuous Pareto frontier (continuous $\text{DistToFrontier} \approx 0$), but exhibits an empirical distance of ~0.0350 against the discrete grid. Therefore, **distance differences below the grid resolution (~0.035) are discretization artifacts and are not meaningful**. Nash social welfare and Utilitarian welfare ratio provide robust, continuous indicators of agreement quality.
 
 ### Bluff Detection Heuristic
 
@@ -314,17 +319,17 @@ python -m src.eval.runner --scenario business_deal --n_trials 30 --protocol sing
 <!-- RESULTS:START stage_a_table -->
 | Method | Agree% | Dist to Frontier (95% CI) | Nash Welfare (95% CI) | Utilitarian Welfare Ratio | Min Util | Gini | Rounds | Wilcoxon vs Engine | vs Engine |
 |---|---|---|---|---|---|---|---|---|---|
-| `consensus_engine` | 100.0% | 0.0654 [0.0544, 0.0780] | 0.3990 [0.3811, 0.4179] | 0.9156 [0.9022, 0.9274] | 0.6266 | 0.0753 | 1.0 | *(Engine)* | — |
+| `consensus_engine` | 100.0% | 0.0686 [0.0568, 0.0817] | 0.3939 [0.3770, 0.4107] | 0.9113 [0.8966, 0.9250] | 0.6244 | 0.0732 | 1.0 | *(Engine)* | — |
 | `naive_average` | 100.0% | 0.0362 [0.0288, 0.0441] | 0.4532 [0.4342, 0.4723] | 0.9525 [0.9425, 0.9612] | 0.6843 | 0.0651 | 0.0 | p = <1e-6 ** | better |
 | `nash_bargaining` | 100.0% | 0.0350 [0.0310, 0.0391] | 0.5481 [0.5202, 0.5757] | 0.9991 [0.9977, 0.9999] | 0.7368 | 0.0504 | 0.0 | p = <1e-6 ** | better |
-| `public_midpoint` | 100.0% | 0.0725 [0.0612, 0.0849] | 0.3885 [0.3744, 0.4019] | 0.9082 [0.8952, 0.9203] | 0.6193 | 0.0748 | 0.0 | p = 0.0017 ** | worse |
+| `public_midpoint` | 100.0% | 0.0725 [0.0612, 0.0849] | 0.3885 [0.3744, 0.4019] | 0.9082 [0.8952, 0.9203] | 0.6193 | 0.0748 | 0.0 | p = 0.0057 ** | worse |
 | `random_uniform` | 96.7% | 0.1610 [0.1281, 0.1973] | 0.2887 [0.2594, 0.3207] | 0.8205 [0.7912, 0.8480] | 0.5390 | 0.0826 | 0.0 | p = <1e-6 ** | worse |
 <!-- RESULTS:END stage_a_table -->
 
 > ⚠️ **What This Benchmark Measures (Honest Caveat):**  
-> All 30 Consensus Engine trials ended in round 1 with exactly 4 LLM calls each (1 mediator proposal + 3 stakeholder critiques). Every party accepted the mediator's first proposal immediately. The engine's modest edge over the public midpoint (distance to frontier 0.0654 vs 0.0725, Wilcoxon $p = 0.0017^{**}$; Nash welfare $p = 0.0015^{**}$) therefore reflects the mediator adjusting the midpoint using issue descriptions, **NOT iterative negotiation**. This should not be described or interpreted as negotiation superiority. Results reflect one scenario (`business_deal`) and one model config (`20b_vs_20b`).
+> All 30 Consensus Engine trials ended in round 1 with exactly 4 LLM calls each (1 mediator proposal + 3 stakeholder critiques). Every party accepted the mediator's first proposal immediately. The engine's edge over the public midpoint reflects the mediator adjusting the midpoint using issue descriptions, **NOT iterative negotiation**. This should not be described or interpreted as negotiation superiority.
 >
-> In symmetric continuous domains without private reservation boundaries, arithmetic baselines like `naive_average` achieve high utilitarian welfare (0.9525) because the arithmetic mean is an effective centroid when preferences are symmetric. Note that `private_ideal_average` is an alias for `naive_average` (evaluated across 4 baselines, N=120 baseline trials; N=150 total across all methods).
+> When comparing methods, **Nash social welfare and Utilitarian welfare ratio serve as headline metrics**. Because the discrete frontier grid sets an empirical distance floor near ~0.035 (under which even theoretical frontiers like `nash_bargaining` score 0.0350 despite continuous distance $\approx 0$), distance differences below the grid resolution (~0.035) are discretization artifacts and not meaningful. In symmetric continuous domains without tight private reservations, arithmetic baselines like `naive_average` achieve high utilitarian welfare because the arithmetic mean is an effective centroid when preferences are symmetric.
 
 #### Stage d: Reservation Impasse & Strategic Sweeps
 
@@ -370,7 +375,7 @@ Every trial emits an unedited JSONL record containing raw inputs, proposals, uti
 
 <!-- RESULTS:START sample_record -->
 ```json
-{"trial_id": 42, "scenario_name": "business_deal", "seed": 42, "method": "consensus_engine", "protocol": "single_text", "agreement_reached": true, "rounds_taken": 1, "per_agent_utilities": {"SupplierCo": 0.5754, "BuyerInc": 0.5793, "LogiTrans": 0.8753}, "final_proposal": {"unit_price": 55.0, "order_volume": 5000.0, "delivery_days": 15.0, "payment_terms": 45.0, "quality_tier": 3.0}, "pareto": {"distance_to_frontier": 0.06, "efficiency_ratio": 0.906, "utilitarian_welfare_ratio": 0.906, "is_pareto_optimal": false, "social_welfare": 2.03, "near_frontier": false}, "fairness": {"nash_welfare": 0.2918, "min_utility": 0.5754, "max_utility": 0.8753, "gini_coefficient": 0.0985, "envy_free": false, "utility_spread": 0.2999}, "privacy": null, "honesty_levels": {"SupplierCo": 1.0, "BuyerInc": 1.0, "LogiTrans": 1.0}, "model_config_name": "120b_vs_20b", "model_names": {"negotiator_model": "openai/gpt-oss-120b", "mediator_model": "openai/gpt-oss-20b"}, "git_commit_hash": "a8328e8", "timestamp": "2026-11-01T17:28:31.651520+00:00", "bluff_detection_scores": {"SupplierCo": {"avg_satisfaction": 6.5, "avg_concession": 0.6, "rounds": 1.0}, "BuyerInc": {"avg_satisfaction": 3.2, "avg_concession": 0.6, "rounds": 1.0}, "LogiTrans": {"avg_satisfaction": 7.5, "avg_concession": 0.4, "rounds": 1.0}}}
+{"trial_id": 42, "scenario_name": "business_deal", "seed": 42, "method": "consensus_engine", "protocol": "single_text", "agreement_reached": true, "rounds_taken": 1, "per_agent_utilities": {"SupplierCo": 0.5753, "BuyerInc": 0.6, "LogiTrans": 0.8606}, "final_proposal": {"unit_price": 55.0, "order_volume": 5000.0, "delivery_days": 15.0, "payment_terms": 45.0, "quality_tier": 3.5}, "pareto": {"distance_to_frontier": 0.067, "efficiency_ratio": 0.9086, "utilitarian_welfare_ratio": 0.9086, "near_frontier": false, "is_pareto_optimal": false, "social_welfare": 2.0359}, "fairness": {"nash_welfare": 0.2971, "min_utility": 0.5753, "max_utility": 0.8606, "gini_coefficient": 0.0934, "envy_free": false, "utility_spread": 0.2853}, "privacy": null, "honesty_levels": {"SupplierCo": 1.0, "BuyerInc": 1.0, "LogiTrans": 1.0}, "model_config_name": "20b_vs_20b", "model_names": {"negotiator_model": "openai/gpt-oss-20b", "mediator_model": "openai/gpt-oss-20b"}, "git_commit_hash": "f5fd136", "timestamp": "2026-11-02T15:34:23.530456+00:00", "llm_calls": 4, "bluff_detection_scores": {"SupplierCo": {"avg_satisfaction": 7.5, "avg_concession": 0.6, "rounds": 1.0}, "BuyerInc": {"avg_satisfaction": 5.0, "avg_concession": 0.6, "rounds": 1.0}, "LogiTrans": {"avg_satisfaction": 9.0, "avg_concession": 0.2, "rounds": 1.0}}}
 ```
 <!-- RESULTS:END sample_record -->
 
@@ -401,7 +406,7 @@ cp .env.example .env
 
 ```bash
 pytest -v
-# Expected: 132 passed (+ 1 live integration test requiring GROQ_API_KEY)
+# Expected: 134 passed (+ 1 live integration test requiring GROQ_API_KEY)
 ```
 
 ### Run a Negotiation *(requires GROQ_API_KEY)*
@@ -484,9 +489,9 @@ cd web && npm run dev
 > [!NOTE]
 > **Public Endpoint Limits & Rate Limiting**:
 > To protect compute resources, endpoints calling LLM inference enforce:
-> - **Per-IP Rate Limit**: 10 requests per minute per client IP across `POST /api/negotiate`, `POST /api/negotiate/start`, `POST /api/scenario/parse`, and `POST /api/eval/run` (returns `429 Too Many Requests`).
+> - **Per-IP Rate Limit**: 10 requests per minute per client IP across `POST /api/negotiate`, `POST /api/negotiate/start`, `POST /api/scenario/parse`, and `POST /api/eval/run` (returns `429 Too Many Requests`). Client IP is resolved from `X-Forwarded-For` (first hop) or `x-real-ip` when running behind reverse proxies (e.g. Vercel), falling back to `request.client.host`. Note that the in-memory limiter is per serverless instance and only best-effort.
 > - **Negotiation Cap**: `max_rounds` capped at $\le 10$ (returns `400 Bad Request` if exceeded).
-> - **Evaluation Cap**: `n_trials` on public batch runs capped at $\le 30$ (returns `400 Bad Request` if exceeded).
+> - **Evaluation Cap**: `n_trials` on public batch runs capped at $\le 5$ (returns `400 Bad Request` if exceeded).
 
 ### `POST /api/negotiate` or `/api/negotiate/start`
 
@@ -577,7 +582,7 @@ Run a benchmark batch with bootstrap statistical aggregation across methods.
 ```json
 {
   "scenario": "business_deal",
-  "n_trials": 30,
+  "n_trials": 5,
   "methods": ["naive_average", "public_midpoint", "nash_bargaining", "consensus_engine"],
   "model_config": "20b_vs_20b",
   "protocol": "single_text",
@@ -741,7 +746,7 @@ The system deploys as **two Vercel projects from this single repository**:
 
 > **Frontend Availability:** The Free-Form Scenario Builder is available in the Next.js web application (`/web`) under the **Scenario Builder** tab.
 >
-> **Scope notice:** Free-form scenarios are **not** covered by the N=30 statistical benchmarks documented in this README. The Pareto efficiency ratios, agreement rates, and Wilcoxon test results in the benchmark tables apply exclusively to the four fixed scenarios (`business_deal`, `roommate`, `trip_planning`, `strategic_negotiation`). Results from free-form scenarios are illustrative and exploratory — they should not be cited as evidence of the engine's negotiation performance.
+> **Scope notice:** Free-form scenarios are **not** covered by the N=30 statistical benchmarks documented in this README. The utilitarian welfare ratios, agreement rates, and Wilcoxon test results in the benchmark tables apply exclusively to the four fixed scenarios (`business_deal`, `roommate`, `trip_planning`, `strategic_negotiation`). Results from free-form scenarios are illustrative and exploratory — they should not be cited as evidence of the engine's negotiation performance.
 
 Consensus Engine includes a free-form scenario input mode that allows you to describe a negotiation situation in plain English. The LLM parses your description into structured `StakeholderProfile` and `Issue` objects, which are then passed directly into the existing negotiation engine — no modifications to the core protocol are required.
 
@@ -790,7 +795,7 @@ Documented in [`RESULTS.md`](RESULTS.md#stage-f-custom-scenario-checks-illustrat
 | 5–6 | Monte Carlo sampling (100,000 random points) | **Approximate** | Approximate utilitarian welfare ratio for high-dimensional spaces |
 | > 6 | Rejected (400 error) | — | Exceeds dimensionality limit |
 
-The grid search in `src/eval/pareto.py` is exponential in issue count ($12^N$ combos at resolution 12; 248,832 points at 5 issues, ~3M at 6). For 5–6 issues the system switches to `monte_carlo_pareto_frontier()` and labels results `approximate` in the API response and UI. Monte Carlo sampling over $[min, max]^N$ evaluates 100,000 randomly sampled packages to construct a non-dominated candidate frontier. In reports and API responses, metrics derived from Monte Carlo frontiers are explicitly flagged with `is_approximate_frontier: true`.
+The grid search in `src/eval/pareto.py` is exponential in issue count ($12^N$ combos at resolution 12; 248,832 points at 5 issues, ~3M at 6). For 5–6 issues the system switches to `monte_carlo_pareto_frontier()` and labels results `approximate` in the API response and UI. Monte Carlo sampling over $[min, max]^N$ evaluates 100,000 randomly sampled packages to construct a non-dominated candidate frontier. In reports and API responses, the strategy used is explicitly flagged via the `pareto_mode` field (`"exhaustive"` for ≤ 4 issues, `"monte_carlo"` for 5–6 issues).
 
 ### API
 

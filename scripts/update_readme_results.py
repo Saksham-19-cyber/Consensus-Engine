@@ -281,6 +281,75 @@ def process_file(filepath: Path, check_only: bool = False) -> bool:
         return True
 
 
+def check_engine_records(claimed_config: str | None = None) -> bool:
+    """Verify that all engine records match the model_config claimed in README and have llm_calls."""
+    readme_file = BASE_DIR / "README.md"
+    if not claimed_config and readme_file.exists():
+        with open(readme_file, "r", encoding="utf-8") as f:
+            readme_text = f.read()
+        m = re.search(r"produced using the `?([a-zA-Z0-9_]+)`? model configuration", readme_text)
+        if m:
+            claimed_config = m.group(1)
+        else:
+            claimed_config = "20b_vs_20b"
+    elif not claimed_config:
+        claimed_config = "20b_vs_20b"
+
+    print(f"[LOG AUDIT] Verifying engine records match claimed config '{claimed_config}'...")
+    all_valid = True
+
+    for fname in ["benchmark_business_deal.jsonl", "reservation_sweep.jsonl"]:
+        log_file = find_log_file(fname)
+        if not log_file or not log_file.exists():
+            continue
+
+        records = []
+        with open(log_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    try:
+                        records.append(json.loads(line))
+                    except Exception:
+                        pass
+
+        engine_records = [r for r in records if r.get("method") == "consensus_engine"]
+        if not engine_records:
+            continue
+
+        total_llm_calls = sum(r.get("llm_calls", 0) for r in engine_records)
+        mismatched = []
+        missing_calls = []
+
+        for r in engine_records:
+            cfg = r.get("model_config_name")
+            if cfg != claimed_config:
+                mismatched.append((r.get("seed"), cfg))
+            if "llm_calls" not in r:
+                missing_calls.append(r.get("seed"))
+
+        mean_calls = total_llm_calls / len(engine_records) if engine_records else 0.0
+        print(
+            f"[LOG AUDIT] {log_file.name}: {len(engine_records)} engine records, "
+            f"total LLM calls = {total_llm_calls} ({mean_calls:.1f}/trial avg)"
+        )
+
+        if mismatched:
+            print(
+                f"[CHECK FAILED] {len(mismatched)} engine record(s) in {log_file.name} differ from claimed config '{claimed_config}':"
+            )
+            for seed, cfg in mismatched[:5]:
+                print(f"  - seed {seed}: model_config_name='{cfg}'")
+            if len(mismatched) > 5:
+                print(f"  ... and {len(mismatched) - 5} more")
+            all_valid = False
+
+        if missing_calls:
+            print(f"[CHECK FAILED] {len(missing_calls)} engine record(s) in {log_file.name} are missing 'llm_calls'")
+            all_valid = False
+
+    return all_valid
+
+
 def main():
     parser = argparse.ArgumentParser(description="Update results tables in documentation from JSONL logs.")
     parser.add_argument("--check", action="store_true", help="Fail with non-zero exit if documentation differs from logs.")
@@ -291,6 +360,11 @@ def main():
     for f in files:
         ok = process_file(f, check_only=args.check)
         if not ok:
+            all_ok = False
+
+    if args.check:
+        config_ok = check_engine_records()
+        if not config_ok:
             all_ok = False
 
     if not all_ok:
