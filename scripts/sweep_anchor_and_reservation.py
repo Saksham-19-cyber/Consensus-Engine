@@ -131,6 +131,7 @@ def run_reservation_sweep(
                         fairness=fairness,
                         seed=seed,
                         llm_calls=trial_calls,
+                        model_config_name=model_config,
                         model_names={"mediator": model_config, "stakeholder": model_config},
                     )
                     writer.write(trial_res)
@@ -255,6 +256,7 @@ def run_anchor_sweep(
                         fairness=fairness,
                         seed=seed,
                         llm_calls=trial_calls,
+                        model_config_name=model_config,
                         model_names={"mediator": model_config, "stakeholder": model_config},
                     )
                     writer.write(trial_res)

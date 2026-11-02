@@ -220,7 +220,7 @@ def run_baseline_trial(
         pareto=pareto,
         fairness=fairness,
         honesty_levels={p.name: p.honesty_level for p in profiles},
-        model_config_name=model_config_name,
+        model_config_name=effective_config,
         model_names=models,
         git_commit_hash=commit_hash,
         timestamp=timestamp,
@@ -251,6 +251,7 @@ def run_engine_trial(
         issues=issues,
         scenario_name=None,
         protocol=protocol,
+        model_config=effective_config,
     )
     pareto, fairness, per_agent = evaluate_outcome(outcome.final_proposal, profiles, issues)
 
@@ -270,7 +271,7 @@ def run_engine_trial(
     commit_hash = git_commit_hash or get_git_commit_hash()
     timestamp = datetime.now(timezone.utc).isoformat()
     models = MODEL_CONFIGS.get(
-        model_config_name,
+        effective_config,
         {"negotiator_model": settings.negotiator_model, "mediator_model": settings.mediator_model},
     )
 
@@ -289,7 +290,7 @@ def run_engine_trial(
         privacy=privacy_metrics,
         honesty_levels={p.name: p.honesty_level for p in profiles},
         llm_calls=trial_calls,
-        model_config_name=model_config_name,
+        model_config_name=effective_config,
         model_names=models,
         git_commit_hash=commit_hash,
         timestamp=timestamp,
