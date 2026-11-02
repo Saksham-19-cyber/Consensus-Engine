@@ -47,6 +47,8 @@ else:
         "http://127.0.0.1:3000",
     ]
 
+# Allow all preview and production deployments hosted on *.vercel.app without
+# having to explicitly enumerate every preview branch deployment URL in CORS_ORIGINS.
 VERCEL_ORIGIN_REGEX = r"^https:\/\/.*\.vercel\.app$"
 
 app.add_middleware(

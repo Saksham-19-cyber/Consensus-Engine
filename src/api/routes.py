@@ -44,12 +44,38 @@ _IP_REQUEST_LOG: dict[str, list[float]] = defaultdict(list)
 _RATE_LIMIT_WINDOW = 60.0  # seconds
 _RATE_LIMIT_MAX_REQUESTS = 10  # max requests per window per IP
 MAX_ALLOWED_ROUNDS = 10
-MAX_ALLOWED_TRIALS = 30
+MAX_ALLOWED_TRIALS = 5
+
+
+def get_client_ip(request: Request) -> str:
+    """
+    Extract client IP from request headers or socket info.
+    Reads the first hop from X-Forwarded-For or x-real-ip as set by reverse
+    proxies (e.g. Vercel / Cloudflare), falling back to request.client.host.
+    """
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        client_ip = xff.split(",")[0].strip()
+        if client_ip:
+            return client_ip
+    x_real_ip = request.headers.get("x-real-ip")
+    if x_real_ip:
+        client_ip = x_real_ip.strip()
+        if client_ip:
+            return client_ip
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
 
 
 def check_rate_limit(request: Request):
-    """Enforce simple per-IP sliding-window rate limit for LLM endpoints."""
-    client_ip = request.client.host if request.client else "unknown"
+    """
+    Enforce simple per-IP sliding-window rate limit for LLM endpoints.
+
+    NOTE: This in-memory limiter is maintained per serverless instance and is
+    only best-effort in serverless / multi-instance deployments (e.g. Vercel functions).
+    """
+    client_ip = get_client_ip(request)
     now = time.time()
     cutoff = now - _RATE_LIMIT_WINDOW
     timestamps = [t for t in _IP_REQUEST_LOG[client_ip] if t > cutoff]

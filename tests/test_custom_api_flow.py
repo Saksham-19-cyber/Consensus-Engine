@@ -194,13 +194,41 @@ def test_endpoint_caps_and_rate_limiting(client):
     assert res_rounds.status_code == 400
     assert "max_rounds exceeds maximum" in res_rounds.json()["detail"]
 
-    # Test n_trials cap (> 30)
+    # Test n_trials cap (> 5)
     res_trials = client.post(
         "/api/eval/run",
-        json={"scenario": "roommate", "n_trials": 35},
+        json={"scenario": "roommate", "n_trials": 6},
     )
     assert res_trials.status_code == 400
     assert "n_trials exceeds maximum" in res_trials.json()["detail"]
+
+    # Test client IP resolution from X-Forwarded-For and X-Real-IP headers
+    from src.api.routes import get_client_ip
+    from starlette.requests import Request
+
+    scope_xff = {
+        "type": "http",
+        "headers": [(b"x-forwarded-for", b"203.0.113.195, 70.41.3.18"), (b"host", b"localhost")],
+        "client": ("127.0.0.1", 12345),
+    }
+    req_xff = Request(scope_xff)
+    assert get_client_ip(req_xff) == "203.0.113.195"
+
+    scope_real = {
+        "type": "http",
+        "headers": [(b"x-real-ip", b"198.51.100.1"), (b"host", b"localhost")],
+        "client": ("127.0.0.1", 12345),
+    }
+    req_real = Request(scope_real)
+    assert get_client_ip(req_real) == "198.51.100.1"
+
+    scope_direct = {
+        "type": "http",
+        "headers": [(b"host", b"localhost")],
+        "client": ("192.0.2.1", 12345),
+    }
+    req_direct = Request(scope_direct)
+    assert get_client_ip(req_direct) == "192.0.2.1"
 
     # Test rate limit trigger by populating the window with 10 timestamps
     now = time.time()
